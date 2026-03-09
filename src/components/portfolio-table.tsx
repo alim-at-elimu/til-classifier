@@ -3,6 +3,37 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
+// ── Shared constants for export ──
+const DIM_DEFS: Record<string, string[]> = {
+  government_depth: ["named_counterparts", "documented_engagement", "institutional_home", "government_delivery_roles"],
+  adoption_readiness: ["transition_logic", "capacity_shift", "adoption_timeline"],
+  cost_realism: ["pilot_unit_cost", "cost_ownership_trajectory", "steady_state_fiscal"],
+  innovation_quality: ["problem_solution_fit", "operational_clarity", "pilot_learning_architecture", "team_timeline_realism"],
+  evidence_strength: ["decision_useful_evidence", "government_decision_mechanisms", "learning_outcome_evidence_chain"],
+};
+
+const DIM_MAX: Record<string, number> = { government_depth: 20, adoption_readiness: 15, cost_realism: 15, innovation_quality: 20, evidence_strength: 15 };
+
+const DIM_LABELS: Record<string, string> = {
+  government_depth: "Government Depth", adoption_readiness: "Adoption Readiness", cost_realism: "Cost Realism",
+  innovation_quality: "Innovation Quality", evidence_strength: "Evidence Strength",
+};
+
+const SUB_LABELS: Record<string, string> = {
+  named_counterparts: "Named counterparts & roles", documented_engagement: "Documented engagement",
+  institutional_home: "Institutional home", government_delivery_roles: "Government delivery roles",
+  transition_logic: "Transition logic", capacity_shift: "Capacity shift plan", adoption_timeline: "Adoption timeline",
+  pilot_unit_cost: "Pilot unit cost", cost_ownership_trajectory: "Cost ownership trajectory", steady_state_fiscal: "Steady-state fiscal",
+  problem_solution_fit: "Problem-solution fit", operational_clarity: "Operational clarity",
+  pilot_learning_architecture: "Learning architecture", team_timeline_realism: "Team & timeline realism",
+  decision_useful_evidence: "Decision-useful evidence", government_decision_mechanisms: "Decision mechanisms",
+  learning_outcome_evidence_chain: "Learning outcome chain",
+};
+
+const GATE_LABELS: Record<string, string> = {
+  country_theme_fit: "Country & Theme", scale_duration_compliance: "Scale & Duration", public_system_embedding: "Public System Embedding",
+};
+
 export interface ProposalRow {
   id: string;
   org_name: string;
@@ -19,7 +50,7 @@ type SortDir = "asc" | "desc";
 
 const BAND_STYLE: Record<string, { bg: string; text: string }> = {
   Excellent: { bg: "bg-green-100", text: "text-green-800" },
-  Good: { bg: "bg-lime-100", text: "text-lime-800" },
+  Good: { bg: "bg-blue-100", text: "text-blue-800" },
   Weak: { bg: "bg-amber-100", text: "text-amber-800" },
   Fail: { bg: "bg-red-100", text: "text-red-800" },
 };
@@ -32,39 +63,183 @@ interface PortfolioTableProps {
   panelistName: string | null;
 }
 
+// ── Export helpers ──
+function getDimScaled(dimData: any, dimKey: string, overrides: Record<string, number>): number {
+  if (!dimData) return 0;
+  const raw = DIM_DEFS[dimKey].reduce((sum, sub) => {
+    const key = `${dimKey}.${sub}`;
+    return sum + (overrides[key] ?? dimData[sub]?.score ?? 0);
+  }, 0);
+  return Math.round((raw / DIM_MAX[dimKey]) * 20);
+}
+
+function computeTotals(call1: any, call2: any, overrides: Record<string, number>) {
+  if (!call1) return { dims: {} as Record<string, number>, total: 0, rec: "Fail" };
+  const d1 = call1.dimensions;
+  const d2 = call2?.dimensions;
+  const dims: Record<string, number> = {
+    government_depth: getDimScaled(d1?.government_depth, "government_depth", overrides),
+    adoption_readiness: getDimScaled(d1?.adoption_readiness, "adoption_readiness", overrides),
+    cost_realism: getDimScaled(d1?.cost_realism, "cost_realism", overrides),
+    innovation_quality: d2 ? getDimScaled(d2.innovation_quality, "innovation_quality", overrides) : 0,
+    evidence_strength: d2 ? getDimScaled(d2.evidence_strength, "evidence_strength", overrides) : 0,
+  };
+  const total = Object.values(dims).reduce((s, v) => s + v, 0);
+  let rec = "Fail";
+  if (total >= 85) rec = "Excellent";
+  else if (total >= 75) rec = "Good";
+  else if (total >= 60) rec = "Weak";
+  return { dims, total, rec };
+}
+
+function generateExportHTML(proposal: any, call1: any, call2: any, totals: any, latestOverrides: Record<string, number>, overrideHistory: any[]) {
+  const gates = call1.gates || {};
+  const consistencyNotes: string[] = call2?.consistency_notes || [];
+  const recommendation: string = call2?.recommendation || "";
+  const summary: string = call2?.summary || "";
+
+  function getSubData(dimKey: string, subKey: string): any {
+    const src = dimKey === "innovation_quality" || dimKey === "evidence_strength" ? call2?.dimensions : call1?.dimensions;
+    return src?.[dimKey]?.[subKey] || null;
+  }
+
+  const scoreBg = (s: number) => ({ 1: "#ef4444", 2: "#fb923c", 3: "#facc15", 4: "#22c55e", 5: "#10b981" }[s] || "#9ca3af");
+  const scoreFg = (s: number) => s === 3 ? "#000" : "#fff";
+  const bandBg = (b: string) => ({ Excellent: "#16a34a", Good: "#2563eb", Weak: "#f59e0b", Fail: "#dc2626" }[b] || "#6b7280");
+  const dimColor = (s: number) => s >= 16 ? "#16a34a" : s >= 12 ? "#ca8a04" : "#ef4444";
+
+  let gatesHTML = "";
+  for (const [gk, gl] of Object.entries(GATE_LABELS)) {
+    const g = gates[gk];
+    if (!g) continue;
+    const passed = g.pass !== false && g.score >= 3;
+    gatesHTML += `<div style="border:1px solid ${passed ? "#bbf7d0" : "#fecaca"};border-radius:6px;padding:8px 10px;margin-bottom:6px;background:${passed ? "#f0fdf4" : "#fef2f2"}">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:4px;font-size:11px;font-weight:700;background:${scoreBg(g.score)};color:${scoreFg(g.score)}">${g.score}</span>
+        <span style="font-size:11px;font-weight:600;color:${passed ? "#15803d" : "#dc2626"}">${gl}</span>
+      </div>
+      ${g.interpretation ? `<div style="font-size:10px;color:#6b7280;margin-left:26px">${g.interpretation}</div>` : ""}
+    </div>`;
+  }
+
+  let dimsHTML = "";
+  for (const [dimKey, subs] of Object.entries(DIM_DEFS)) {
+    const dimScore = totals.dims[dimKey] ?? 0;
+    dimsHTML += `<tr><td colspan="3" style="background:#f3f4f6;padding:6px 10px;font-size:11px;font-weight:700;color:#4b5563;border-top:1px solid #e5e7eb"><div style="display:flex;justify-content:space-between"><span>${DIM_LABELS[dimKey]}</span><span style="color:${dimColor(dimScore)}">${dimScore}/20</span></div></td></tr>`;
+    for (const subKey of subs) {
+      const data = getSubData(dimKey, subKey);
+      const aiScore = data?.score ?? 0;
+      const key = `${dimKey}.${subKey}`;
+      const currentScore = latestOverrides[key] ?? aiScore;
+      const hasOverride = latestOverrides[key] !== undefined;
+      const history = overrideHistory.filter((o: any) => o.sub_criterion_key === key);
+
+      let detail = "";
+      if (data?.interpretation) detail += `<div style="font-size:10px;color:#6b7280;margin:2px 0"><b>Interpretation:</b> ${data.interpretation}</div>`;
+      if (data?.extract) detail += `<div style="font-size:10px;color:#9ca3af;margin:2px 0;font-style:italic">"${data.extract}"</div>`;
+      if (data?.rubric_anchor) detail += `<div style="font-size:10px;color:#9ca3af;margin:2px 0"><b>Rubric (${aiScore}):</b> ${data.rubric_anchor}</div>`;
+
+      let overrideHTML = "";
+      if (history.length > 0) {
+        overrideHTML = history.map((h: any) =>
+          `<div style="font-size:10px;color:#7c3aed;margin:2px 0">Override: ${h.original_score} → ${h.override_score} by ${h.panelist_name}: ${h.rationale}</div>`
+        ).join("");
+      }
+
+      dimsHTML += `<tr style="border-top:1px solid #f3f4f6">
+        <td style="padding:5px 10px;width:28px;vertical-align:top">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:4px;font-size:10px;font-weight:700;background:${scoreBg(currentScore)};color:${scoreFg(currentScore)}${hasOverride ? ";box-shadow:0 0 0 2px #a78bfa" : ""}">${currentScore}</span>
+        </td>
+        <td style="padding:5px 8px;font-size:11px;color:#374151;vertical-align:top">
+          ${SUB_LABELS[subKey] || subKey}${hasOverride ? `<span style="color:#9ca3af;text-decoration:line-through;margin-left:4px;font-size:10px">${aiScore}</span>` : ""}
+        </td>
+        <td style="padding:5px 10px;vertical-align:top">${detail}${overrideHTML}</td>
+      </tr>`;
+    }
+  }
+
+  let notesHTML = "";
+  if (consistencyNotes.length > 0) {
+    notesHTML = `<div style="margin-top:12px;padding:8px 10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px">
+      <div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Consistency Notes</div>
+      ${consistencyNotes.map((n) => `<div style="font-size:10px;color:#4b5563;margin-bottom:3px">${n}</div>`).join("")}
+    </div>`;
+  }
+
+  const dimBarHTML = Object.entries(DIM_LABELS).map(([dk, label]) => {
+    const s = totals.dims[dk] ?? 0;
+    return `<div style="flex:1;text-align:center"><div style="font-size:16px;font-weight:700;color:${dimColor(s)}">${s}</div><div style="font-size:9px;color:#9ca3af">${label}</div></div>`;
+  }).join("");
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>${proposal.org_name} — TIL RFP Assessment</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:#111; max-width:800px; margin:0 auto; padding:24px; font-size:12px; }
+  table { width:100%; border-collapse:collapse; }
+  @media print { body { padding:12px; } }
+  .header { display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:12px; border-bottom:2px solid #111; margin-bottom:12px; }
+</style>
+</head><body>
+  <div class="header">
+    <div>
+      <div style="font-size:18px;font-weight:800">${proposal.org_name}</div>
+      <div style="font-size:11px;color:#6b7280;margin-top:2px">${proposal.country} · ${proposal.theme}</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="text-align:right"><div style="font-size:28px;font-weight:900;line-height:1">${totals.total}</div><div style="font-size:9px;color:#9ca3af">/100</div></div>
+      <span style="padding:4px 12px;border-radius:6px;font-size:12px;font-weight:700;color:#fff;background:${bandBg(totals.rec)}">${totals.rec}</span>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid #e5e7eb;margin-bottom:12px">${dimBarHTML}</div>
+  ${(recommendation || summary) ? `<div style="padding:8px 10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;margin-bottom:12px"><div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px">AI Recommendation</div><div style="font-size:11px;color:#374151;line-height:1.5">${recommendation || summary}</div></div>` : ""}
+  <div style="margin-bottom:12px">
+    <div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Hard Gates</div>
+    ${gatesHTML}
+  </div>
+  <table style="border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;margin-bottom:8px">${dimsHTML}</table>
+  ${notesHTML}
+  <div style="margin-top:16px;padding-top:8px;border-top:1px solid #e5e7eb;font-size:9px;color:#9ca3af;text-align:center">
+    TIL RFP Classifier v3.4 · Generated ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })} · Elimu-Soko
+  </div>
+</body></html>`;
+}
+
+function downloadHTML(html: string, filename: string) {
+  const blob = new Blob([html], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: PortfolioTableProps) {
   const [proposals, setProposals] = useState<ProposalRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("raw_total");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [unlockConfirm, setUnlockConfirm] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
-  useEffect(() => {
-    loadProposals();
-  }, []);
+  useEffect(() => { loadProposals(); }, []);
 
   async function loadProposals() {
     const { data } = await supabase
       .from("proposals")
-      .select(
-        "id, org_name, country, theme, status, classifier_results(raw_total, recommendation, gates_passed)"
-      )
+      .select("id, org_name, country, theme, status, classifier_results(raw_total, recommendation, gates_passed)")
       .in("status", ["scored", "in_review", "finalized"]);
 
     if (data) {
       const rows: ProposalRow[] = data.map((p: any) => {
-        const cr = Array.isArray(p.classifier_results)
-          ? p.classifier_results[0]
-          : p.classifier_results;
+        const cr = Array.isArray(p.classifier_results) ? p.classifier_results[0] : p.classifier_results;
         return {
-          id: p.id,
-          org_name: p.org_name || "Unknown",
-          country: p.country || "",
-          theme: p.theme || "",
-          status: p.status,
-          raw_total: cr?.raw_total ?? null,
-          recommendation: cr?.recommendation ?? null,
-          gates_passed: cr?.gates_passed ?? null,
+          id: p.id, org_name: p.org_name || "Unknown", country: p.country || "",
+          theme: p.theme || "", status: p.status, raw_total: cr?.raw_total ?? null,
+          recommendation: cr?.recommendation ?? null, gates_passed: cr?.gates_passed ?? null,
         };
       });
       setProposals(rows);
@@ -73,31 +248,21 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
   }
 
   function handleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir(sortDir === "asc" ? "desc" : "asc");
-    } else {
-      setSortKey(key);
-      setSortDir(key === "raw_total" ? "desc" : "asc");
-    }
+    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir(key === "raw_total" ? "desc" : "asc"); }
   }
 
   const sorted = [...proposals].sort((a, b) => {
     let cmp = 0;
     switch (sortKey) {
-      case "org_name":
-      case "country":
-      case "theme":
-        cmp = (a[sortKey] || "").localeCompare(b[sortKey] || "");
-        break;
+      case "org_name": case "country": case "theme":
+        cmp = (a[sortKey] || "").localeCompare(b[sortKey] || ""); break;
       case "raw_total":
-        cmp = (a.raw_total ?? 0) - (b.raw_total ?? 0);
-        break;
+        cmp = (a.raw_total ?? 0) - (b.raw_total ?? 0); break;
       case "recommendation":
-        cmp = (BAND_ORDER[a.recommendation || ""] ?? 0) - (BAND_ORDER[b.recommendation || ""] ?? 0);
-        break;
+        cmp = (BAND_ORDER[a.recommendation || ""] ?? 0) - (BAND_ORDER[b.recommendation || ""] ?? 0); break;
       case "gates_passed":
-        cmp = (a.gates_passed ? 1 : 0) - (b.gates_passed ? 1 : 0);
-        break;
+        cmp = (a.gates_passed ? 1 : 0) - (b.gates_passed ? 1 : 0); break;
     }
     return sortDir === "asc" ? cmp : -cmp;
   });
@@ -113,11 +278,56 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
     setUnlockConfirm(null);
   }
 
+  async function handleExportAll() {
+    setExporting(true);
+    try {
+      const ids = proposals.map((p) => p.id);
+
+      const [crRes, ovRes] = await Promise.all([
+        supabase.from("classifier_results").select("proposal_id, call1_json, call2_json").in("proposal_id", ids),
+        supabase.from("panel_overrides").select("proposal_id, sub_criterion_key, original_score, override_score, rationale, created_at, panelists(name)").in("proposal_id", ids).order("created_at", { ascending: true }),
+      ]);
+
+      const resultMap = new Map((crRes.data || []).map((r: any) => [r.proposal_id, r]));
+      const overrideMap = new Map<string, any[]>();
+      for (const o of (ovRes.data || [])) {
+        const arr = overrideMap.get(o.proposal_id) || [];
+        arr.push({ ...o, panelist_name: (o as any).panelists?.name || "Unknown" });
+        overrideMap.set(o.proposal_id, arr);
+      }
+
+      for (const p of proposals) {
+        const cr = resultMap.get(p.id);
+        if (!cr) continue;
+        const call1 = cr.call1_json;
+        const call2 = cr.call2_json;
+        const history = overrideMap.get(p.id) || [];
+
+        const latestOverrides: Record<string, number> = {};
+        for (const o of history) latestOverrides[o.sub_criterion_key] = o.override_score;
+
+        const totals = computeTotals(call1, call2, latestOverrides);
+        const html = generateExportHTML(
+          { org_name: p.org_name, country: p.country, theme: p.theme },
+          call1, call2, totals, latestOverrides, history
+        );
+        const safeName = p.org_name.replace(/[^a-zA-Z0-9]/g, "_");
+        downloadHTML(html, `TIL_Assessment_${safeName}.html`);
+
+        // Small delay to avoid browser blocking multiple downloads
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    } catch (err) {
+      console.error("Export error:", err);
+    }
+    setExporting(false);
+  }
+
   function SortHeader({ label, sortKeyName }: { label: string; sortKeyName: SortKey }) {
     const active = sortKey === sortKeyName;
     return (
       <th
-        className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-black select-none"
+        className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-black select-none"
         onClick={() => handleSort(sortKeyName)}
       >
         {label} {active ? (sortDir === "asc" ? "↑" : "↓") : ""}
@@ -130,17 +340,29 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
 
   return (
     <div>
-      <div className="overflow-x-auto rounded-lg border border-gray-200">
+      {/* Top bar */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-xs text-gray-400">{proposals.length} proposal{proposals.length !== 1 ? "s" : ""}</div>
+        <button
+          onClick={handleExportAll}
+          disabled={exporting}
+          className="text-xs bg-black text-white rounded px-3 py-1.5 font-medium hover:bg-gray-800 disabled:opacity-50"
+        >
+          {exporting ? "Exporting..." : "Export All Reports"}
+        </button>
+      </div>
+
+      <div className="overflow-x-auto rounded border border-gray-200">
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
               <SortHeader label="Organisation" sortKeyName="org_name" />
               <SortHeader label="Country" sortKeyName="country" />
               <SortHeader label="Theme" sortKeyName="theme" />
+              <SortHeader label="Gates" sortKeyName="gates_passed" />
               <SortHeader label="Score" sortKeyName="raw_total" />
               <SortHeader label="Band" sortKeyName="recommendation" />
-              <SortHeader label="Gates" sortKeyName="gates_passed" />
-              <th className="px-3 py-2.5 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-20">Status</th>
+              <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-16">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -153,41 +375,27 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
                   className={`hover:bg-blue-50 cursor-pointer transition-colors ${isLocked ? "bg-gray-50" : ""}`}
                   onClick={() => onSelectProposal(p.id)}
                 >
-                  <td className="px-3 py-3 font-medium">
-                    {p.org_name}
-                  </td>
-                  <td className="px-3 py-3 text-gray-600">{p.country}</td>
-                  <td className="px-3 py-3 text-xs text-gray-600">{p.theme}</td>
-                  <td className="px-3 py-3 font-bold tabular-nums">{p.raw_total ?? "—"}</td>
-                  <td className="px-3 py-3">
-                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${band.bg} ${band.text}`}>
-                      {p.recommendation || "—"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-2.5 font-medium">{p.org_name}</td>
+                  <td className="px-3 py-2.5 text-gray-600">{p.country}</td>
+                  <td className="px-3 py-2.5 text-xs text-gray-600">{p.theme}</td>
+                  <td className="px-3 py-2.5">
                     {p.gates_passed === null ? "—" : p.gates_passed ? (
                       <span className="text-green-600 font-semibold text-xs">PASS</span>
                     ) : (
                       <span className="text-red-600 font-semibold text-xs">FAIL</span>
                     )}
                   </td>
-                  <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-3 py-2.5 font-bold tabular-nums">{p.raw_total ?? "—"}</td>
+                  <td className="px-3 py-2.5">
+                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${band.bg} ${band.text}`}>
+                      {p.recommendation || "—"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                     {isLocked ? (
-                      <button
-                        onClick={() => setUnlockConfirm(p.id)}
-                        className="text-xs text-gray-400 hover:text-black"
-                        title="Locked — click to unlock"
-                      >
-                        🔒
-                      </button>
+                      <button onClick={() => setUnlockConfirm(p.id)} className="text-xs text-gray-400 hover:text-black" title="Locked">🔒</button>
                     ) : (
-                      <button
-                        onClick={() => handleLock(p.id)}
-                        className="text-xs text-gray-300 hover:text-black"
-                        title="Click to lock"
-                      >
-                        🔓
-                      </button>
+                      <button onClick={() => handleLock(p.id)} className="text-xs text-gray-300 hover:text-black" title="Click to lock">🔓</button>
                     )}
                   </td>
                 </tr>
@@ -206,18 +414,8 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
               This will allow edits again. Confirming as <span className="font-semibold text-black">{panelistName || "Unknown"}</span>.
             </p>
             <div className="flex gap-2">
-              <button
-                onClick={() => handleUnlock(unlockConfirm)}
-                className="text-xs bg-black text-white rounded px-4 py-1.5 font-medium hover:bg-gray-800"
-              >
-                Unlock
-              </button>
-              <button
-                onClick={() => setUnlockConfirm(null)}
-                className="text-xs text-gray-500 hover:text-black px-4 py-1.5"
-              >
-                Cancel
-              </button>
+              <button onClick={() => handleUnlock(unlockConfirm)} className="text-xs bg-black text-white rounded px-4 py-1.5 font-medium hover:bg-gray-800">Unlock</button>
+              <button onClick={() => setUnlockConfirm(null)} className="text-xs text-gray-500 hover:text-black px-4 py-1.5">Cancel</button>
             </div>
           </div>
         </div>
