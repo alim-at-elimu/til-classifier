@@ -5,7 +5,7 @@ import { useGoogleAuth } from "@/lib/google-auth";
 import { scanRootFolder, InnovatorFolder } from "@/lib/gdrive";
 
 interface FolderScannerProps {
-  onScanComplete: (folders: InnovatorFolder[]) => void;
+  onScanComplete: (folders: InnovatorFolder[], rootFolderId: string) => void;
 }
 
 export function FolderScanner({ onScanComplete }: FolderScannerProps) {
@@ -25,7 +25,7 @@ export function FolderScanner({ onScanComplete }: FolderScannerProps) {
       if (results.length === 0) {
         setError("No sub-folders found. Check the folder ID.");
       } else {
-        onScanComplete(results);
+        onScanComplete(results, folderId.trim());
       }
     } catch (err: any) {
       setError(err.message || "Scan failed");

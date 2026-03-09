@@ -16,31 +16,18 @@ export interface InnovatorFolder {
 
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 
-const ANNEX_PATTERNS =
-  /annex|appendix|letter|mou|memorandum|support|government|cover|loi|terms|evidence|map|data|baseline/i;
-
-function detectRole(
-  fileName: string,
-  ext: string,
-  alreadyHasNarrative: boolean
-): "narrative" | "cost" | "annex" {
-  const name = fileName.toLowerCase().replace(/\.[^.]+$/, "");
-  if (ext === "xlsx" || ext === "xls") return "cost";
-  if (ext === "pdf") {
-    if (ANNEX_PATTERNS.test(name)) return "annex";
-    if (!alreadyHasNarrative) return "narrative";
-    return "annex";
-  }
-  return "annex";
-}
-
 function assignRoles(files: DriveFile[]): DriveFile[] {
-  let hasNarrative = false;
-  return files.map((f) => {
-    const ext = f.name.split(".").pop()?.toLowerCase() || "";
-    const role = detectRole(f.name, ext, hasNarrative);
-    if (role === "narrative") hasNarrative = true;
-    return { ...f, role };
+  const sorted = [...files].sort((a, b) => a.name.localeCompare(b.name));
+
+  return sorted.map((f) => {
+    const nameLower = f.name.toLowerCase();
+    if (/doc.?1[^0-9]/i.test(nameLower)) {
+      return { ...f, role: "narrative" as const };
+    }
+    if (/doc.?2[^0-9]/i.test(nameLower)) {
+      return { ...f, role: "cost" as const };
+    }
+    return { ...f, role: "annex" as const };
   });
 }
 
@@ -88,7 +75,10 @@ export async function scanRootFolder(
     const proposalPdf = files.find((f) => f.role === "narrative") || null;
     const budgetXlsx = files.find((f) => f.role === "cost") || null;
     const annexes = files.filter(
-      (f) => f.role === "annex" && f.id !== proposalPdf?.id && f.id !== budgetXlsx?.id
+      (f) =>
+        f.role === "annex" &&
+        f.id !== proposalPdf?.id &&
+        f.id !== budgetXlsx?.id
     );
 
     results.push({
