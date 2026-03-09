@@ -4,6 +4,7 @@ import {
   SYSTEM_PROMPT_CALL2,
   safeParseJSON,
   computeTotals,
+  DIM_DEFS,
 } from "@/lib/classifier-engine";
 
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
@@ -12,7 +13,7 @@ const MAX_RETRIES = 3;
 async function callClaude(
   system: string,
   content: any[],
-  maxTok: number = 8000
+  maxTok: number = 16000
 ): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
   let data: any;
 
@@ -100,7 +101,7 @@ export async function POST(req: NextRequest) {
       annexNote ||
       "No annex files were submitted separately.";
 
-    // Call 1: Gates + Dimensions 1-3
+    // ── Call 1: Gates + Dimensions 1-3 ──
     const call1Result = await callClaude(SYSTEM_PROMPT_CALL1, [
       {
         type: "document",
@@ -112,9 +113,9 @@ export async function POST(req: NextRequest) {
       },
       {
         type: "text",
-        text: `Organisation: ${org || "(extract from document)"}\nCountry: ${country || "(extract from document)"}\nTheme: ${theme || "(extract from document)"}\n\n${costNote}\n\n${annexNoteText}\n\nEvaluate all three gates in sequence. If gates pass, score dimensions 1, 2, and 3. Score every sub-criterion independently.`,
+        text: `Organisation: ${org || "(extract from document)"}\nCountry: ${country || "(extract from document)"}\nTheme: ${theme || "(extract from document)"}\n\n${costNote}\n\n${annexNoteText}\n\nEvaluate all three gates in sequence. If gates pass, score dimensions 1, 2, and 3. Score every sub-criterion independently. Output only valid JSON.`,
       },
-    ]);
+    ], 16000);
 
     const call1 = safeParseJSON(call1Result.text);
     if (!call1) {
@@ -127,20 +128,31 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Build Call 2 context from Call 1
-    const call1Summary = JSON.stringify(
-      {
-        applicant: call1.applicant,
-        gates: call1.gates,
-        all_gates_passed: call1.all_gates_passed,
-        dimensions: call1.dimensions,
-        call1_partial_raw: call1.call1_partial_raw,
-      },
-      null,
-      2
-    );
+    // ── Build Call 2 context exactly as the artifact does ──
+    const extractedOrg = call1.applicant?.name || org || "(extract from document)";
+    const extractedCountry = call1.applicant?.country || country || "(extract from document)";
+    const extractedTheme = call1.applicant?.theme || theme || "(extract from document)";
 
-    // Call 2: Dimensions 4-5 + consistency + recommendation
+    const d1 = call1.dimensions;
+
+    const scaledPartial = (() => {
+      const gd = DIM_DEFS.government_depth.reduce((s: number, k: string) => s + (d1?.government_depth?.[k]?.score || 0), 0);
+      const ar = DIM_DEFS.adoption_readiness.reduce((s: number, k: string) => s + (d1?.adoption_readiness?.[k]?.score || 0), 0);
+      const cr = DIM_DEFS.cost_realism.reduce((s: number, k: string) => s + (d1?.cost_realism?.[k]?.score || 0), 0);
+      return Math.round((gd / 20) * 20) + Math.round((ar / 15) * 20) + Math.round((cr / 15) * 20);
+    })();
+
+    const gateNote = call1.all_gates_passed
+      ? ""
+      : "\nNOTE: One or more gates scored 1 or 2 (gate failure flagged). Score all dimensions normally regardless. The gate failure is an advisory flag for the panel.";
+
+    const partial = `Call 1 sub-criterion scores (raw):
+Government Depth: ${DIM_DEFS.government_depth.map((k: string) => `${k}=${d1?.government_depth?.[k]?.score || 0}`).join(", ")}
+Adoption Readiness: ${DIM_DEFS.adoption_readiness.map((k: string) => `${k}=${d1?.adoption_readiness?.[k]?.score || 0}`).join(", ")}
+Cost Realism: ${DIM_DEFS.cost_realism.map((k: string) => `${k}=${d1?.cost_realism?.[k]?.score || 0}`).join(", ")}
+call1_scaled_partial: ${scaledPartial} (already scaled /60 — do not recompute)${gateNote}`;
+
+    // ── Call 2: Dimensions 4-5 + consistency + recommendation ──
     const call2Result = await callClaude(SYSTEM_PROMPT_CALL2, [
       {
         type: "document",
@@ -152,9 +164,9 @@ export async function POST(req: NextRequest) {
       },
       {
         type: "text",
-        text: `CALL 1 RESULTS (for context — do not re-score these dimensions):\n${call1Summary}\n\n${costNote}\n\n${annexNoteText}\n\nScore dimensions 4 and 5. Write consistency notes and the recommendation. The call1_scaled_partial for threshold calculation is provided in the Call 1 results above.`,
+        text: `Organisation: ${extractedOrg}\nCountry: ${extractedCountry}\nTheme: ${extractedTheme}\n\n${partial}\n\n${costNote}\n\n${annexNoteText}\n\nScore dimensions 4 and 5 independently. Write consistency notes and produce the final recommendation. Output only valid JSON.`,
       },
-    ]);
+    ], 16000);
 
     const call2 = safeParseJSON(call2Result.text);
     if (!call2) {
@@ -170,6 +182,11 @@ export async function POST(req: NextRequest) {
 
     // Compute totals
     const totals = computeTotals(call1, call2);
+
+    // Set overall_score on call2 as the artifact does
+    if (totals) {
+      call2.overall_score = totals.total;
+    }
 
     return NextResponse.json({
       call1,

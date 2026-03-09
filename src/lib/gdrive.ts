@@ -16,16 +16,29 @@ export interface InnovatorFolder {
 
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 
+const ANNEX_PATTERNS =
+  /annex|appendix|letter|mou|memorandum|support|government|cover|loi|terms|evidence|map|data|baseline/i;
+
 function assignRoles(files: DriveFile[]): DriveFile[] {
   const sorted = [...files].sort((a, b) => a.name.localeCompare(b.name));
 
+  let hasNarrative = false;
   return sorted.map((f) => {
-    const nameLower = f.name.toLowerCase();
-    if (/doc.?1[^0-9]/i.test(nameLower)) {
-      return { ...f, role: "narrative" as const };
-    }
-    if (/doc.?2[^0-9]/i.test(nameLower)) {
+    const name = f.name.toLowerCase().replace(/\.[^.]+$/, "");
+    const ext = f.name.split(".").pop()?.toLowerCase() || "";
+
+    if (ext === "xlsx" || ext === "xls") {
       return { ...f, role: "cost" as const };
+    }
+    if (ext === "pdf") {
+      if (ANNEX_PATTERNS.test(name)) {
+        return { ...f, role: "annex" as const };
+      }
+      if (!hasNarrative) {
+        hasNarrative = true;
+        return { ...f, role: "narrative" as const };
+      }
+      return { ...f, role: "annex" as const };
     }
     return { ...f, role: "annex" as const };
   });
