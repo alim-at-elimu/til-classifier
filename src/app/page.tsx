@@ -12,8 +12,10 @@ import { PanelistPicker } from "@/components/panelist-picker";
 import { useGoogleAuth } from "@/lib/google-auth";
 import { InnovatorFolder } from "@/lib/gdrive";
 import { runBatch, BatchProgress } from "@/lib/batch-runner";
+import { AnalyticsDashboard } from "@/components/analytics-dashboard";
 
-type Tab = "batch" | "review";
+
+type Tab = "batch" | "review" | "analytics";
 
 interface Panelist {
   id: string;
@@ -47,7 +49,6 @@ export default function Home() {
     init();
   }, []);
 
-  // Force panelist selection when switching to Review tab
   useEffect(() => {
     if (activeTab === "review" && !currentPanelist) {
       setShowPanelistModal(true);
@@ -123,6 +124,12 @@ export default function Home() {
         >
           Review
         </button>
+        <button
+          onClick={() => { setActiveTab("analytics"); setSelectedProposalId(null); }}
+          className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "analytics" ? "border-black text-black" : "border-transparent text-gray-400 hover:text-gray-600"}`}
+        >
+          Analytics
+        </button>
       </div>
 
       {/* Batch tab */}
@@ -168,6 +175,9 @@ export default function Home() {
           onBack={() => setSelectedProposalId(null)}
         />
       )}
+
+      {/* Analytics tab — placeholder */}
+      {activeTab === "analytics" && <AnalyticsDashboard />}
 
       {/* Panelist selection modal */}
       {showPanelistModal && (
