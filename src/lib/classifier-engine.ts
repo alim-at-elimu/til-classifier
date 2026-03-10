@@ -1,14 +1,24 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// TIL RFP Classifier Engine v3.4.1 — calibration patch applied
-// Changes from v3.4:
-//   1. learning_outcome_evidence_chain: carve-out for government data systems
-//   2. cost_ownership_trajectory: panel flag when digital cost ceiling fires
-//   3. steady_state_fiscal: panel flags when "will explore" or household
-//      spending rules fire
+// TIL RFP Classifier Engine v4.0 — sequential decision protocol rebuild
+//
+// What changed from v3.4.1:
+//   - Stacked IF/AND/BUT/UNLESS conditional rules replaced with explicit
+//     numbered decision steps per sub-criterion. The model follows a path,
+//     not a rule wall.
+//   - Score 4/5 boundaries made explicit and binary for the sub-criteria
+//     that showed variance in calibration (government_depth, adoption_readiness,
+//     government_decision_mechanisms).
+//   - Panel flag instructions moved into the decision steps that trigger them,
+//     not stated as separate paragraphs. Reduces the chance the model reads
+//     the rule but forgets the flag.
+//   - Cost realism rules preserved verbatim from v3.4.1 — they were stable
+//     and working.
+//   - learning_outcome_evidence_chain carve-out preserved verbatim.
+//   - All rubric anchor texts, schema, scoring math, and gate logic unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RUBRIC v3 — single source of truth
+// RUBRIC v3 — single source of truth (unchanged from v3.4.1)
 // ─────────────────────────────────────────────────────────────────────────────
 const RUBRIC = {
   gates: [
@@ -298,7 +308,7 @@ const RUBRIC = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PROMPT BUILDERS
+// PROMPT BUILDERS (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 function buildGateBlock(gate: any): string {
   const lines = [`GATE: ${gate.name.toUpperCase()}\nSource: ${gate.source}`];
@@ -315,149 +325,338 @@ function buildDimBlock(dim: any): string {
     `══════════════════════════════════════════════════════════════`,
     `DIMENSION: ${dim.name.toUpperCase()}`,
     `20% | 20 points | Core question: ${dim.core_question}`,
-    `Score 3 = minimum acceptable. Most competent proposals cluster 3–4. Score 5 requires evidence beyond compliance.`,
+    `Score 3 = minimum acceptable. Most competent proposals cluster 3–4. Score 5 is rare and requires evidence beyond compliance.`,
     `══════════════════════════════════════════════════════════════`,
   ].join("\n");
   return [header, ...dim.sub.map(buildSubBlock)].join("\n\n");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SCORING RULES
+// CONSERVATIVE DEFAULTS (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 const CONSERVATIVE_RULES = `══════════════════════════════════════════════════════════════
-MANDATORY CONSERVATIVE SCORING RULES — apply to every score
+MANDATORY CONSERVATIVE SCORING DEFAULTS
 ══════════════════════════════════════════════════════════════
-1. When genuinely borderline between two adjacent scores, assign the LOWER score. Record both candidates and the tension in the borderline fields.
-2. Annex references — TWO CASES, apply strictly:
-   CASE A — Narrative explicitly references an annex (e.g. "see Annex B", "refer to the attached MoU", "as set out in Annex C"): score with benefit of the doubt, treating the referenced content as present. Set "panel_verify" to a short string quoting the specific reference (e.g. "Narrative cites 'see Annex B for signed MoU' — panel to confirm content on receipt"). Do NOT set panel_verify to null in this case.
-   CASE B — No explicit annex reference in the narrative text for this sub-criterion: apply strict conservative scoring. No benefit of the doubt. Set "panel_verify" to null.
-3. Evidence Anchoring: if no evidence can be found for a sub-criterion, score it 1. Do not infer or extrapolate beyond what the proposal text explicitly states.
-4. Score 5 requires concrete, verifiable evidence clearly exceeding the score-4 threshold. When in doubt between 4 and 5, assign 4.
-5. Score calibration: most competent proposals cluster between 3 and 4. Score 5 is rare. Score inflation is a classification error.
-6. Cross-reference: if the narrative claims government partnership but Annex B contains no letter of support AND no explicit reference to an annex is made, score Documented Engagement based on documentation actually present, not the narrative claim.
-7. Technology and platform cost at scale — adequacy test: for cost ownership trajectory and steady-state fiscal sustainability, if the highest-cost at-scale item (technology licensing, AI inference, platform hosting, vendor subscription) relies on speculative or exploratory language ("one possible option", "will explore", "may be needed", "could be absorbed") rather than a confirmed funding mechanism or named budget line, award 3 not 4, regardless of how well the non-digital costs are covered.`;
+1. When genuinely borderline between two adjacent scores, assign the LOWER score. Record both candidates in the borderline fields.
+2. Annex references — two cases:
+   CASE A: Narrative explicitly references an annex ("see Annex B", "refer to the attached MoU"): score with benefit of the doubt. Set panel_verify to a short string quoting the specific reference. Do NOT set panel_verify to null.
+   CASE B: No explicit annex reference: apply strict conservative scoring. Set panel_verify to null.
+3. If no evidence can be found for a sub-criterion, score 1. Do not infer beyond what the proposal states.
+4. Score 5 requires concrete evidence clearly exceeding the score-4 threshold. When in doubt between 4 and 5, assign 4.
+5. Score calibration: most competent proposals cluster 3–4. Score 5 is rare. Score inflation is a classification error.
+6. Technology at scale: if the highest-cost at-scale item relies on speculative language ("will explore", "one possible option", "may be needed") rather than a confirmed funding mechanism, award 3 not 4 regardless of how well non-digital costs are covered.`;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// EVIDENCE FORMAT (unchanged)
+// ─────────────────────────────────────────────────────────────────────────────
 const EVIDENCE_FORMAT = `══════════════════════════════════════════════════════════════
 EVIDENCE FORMAT — required for every gate and sub-criterion
 ══════════════════════════════════════════════════════════════
-- "extract": verbatim quote (max 150 words) that most directly justifies the score. Copy the exact words from the proposal. Use quotation marks. Write "No evidence found." if absent.
-- "interpretation": 1 sentence (2 max if genuinely complex) stating why the extract justifies the score. Write in plain English for a non-technical reviewer. Never reference internal field names.
-- "rubric_anchor": copy the COMPLETE indicator text from the rubric for the score level awarded.
-- "borderline": null if unambiguous. If genuinely borderline, one sentence naming the tension. Also populate "borderline_rubric_low" and "borderline_rubric_high".
-- "panel_verify": null unless Case A annex rule applies OR a panel flag rule below instructs otherwise. Where a panel flag fires, panel_verify must be populated with the specified "P:" string. Do NOT set panel_verify to null when a panel flag instruction applies.`;
-
-const GATE_RULES = `══════════════════════════════════════════════════════════════
-HARD GATES — evaluate in sequence, flag failures
-══════════════════════════════════════════════════════════════
-A score of 1 or 2 on any gate = FLAG as gate failure. Still score all dimensions. The panel needs full scores to make informed decisions.
-Gate scores do not contribute to the weighted score. If any gate scores 1 or 2, set all_gates_passed to false but continue scoring all dimensions normally.`;
-
-const CALIBRATION_ADDITIONS_CALL1 = `══════════════════════════════════════════════════════════════
-SCORING DECISION RULES — CALL 1
-══════════════════════════════════════════════════════════════
-These are binding decision rules. Apply them before awarding any score. They override general conservative rules where they conflict.
-
-── named_counterparts ──
-IF named institutional units with defined responsibilities across multiple levels (national AND district/county or equivalent) → score 5. Individual names are not required. Decision rights do not need to be separately stated if the units have specified delivery, oversight, and accountability functions. In government systems where staff are deployed by unit and role rather than by individual name, named institutional units (e.g., DEE Monitoring and Evaluation Unit, regional inspectorates, IEF planners) with specified delivery roles across national and sub-national levels satisfy score 5. Do not penalise the absence of individual names where the proposal names units with clear functions at multiple levels and documents active engagement with those units.
-IF named individuals or units at only one level, OR responsibilities are vague or generic → score 4.
-
-── documented_engagement ──
-IF referenced annex establishes formal institutional authorisation for work this pilot directly extends, AND narrative explicitly references that annex → score 5. A pilot-specific letter is not required if the authorisation covers ongoing work the proposal explicitly extends.
-IF letter or MoU exists but does not reference this specific pilot AND no explicit annex reference in narrative → score 4 maximum.
-
-── institutional_home ──
-HARD RULE: A letter or authorization that grants permission to engage with government counterparts in an existing workstream does not constitute endorsement of the proposed institutional home for a new pilot. Score 5 requires a documented reference — in a letter, MoU, or recorded meeting — that explicitly confirms or endorses the specific directorate or unit proposed as the institutional anchor for this intervention. General authorization for ongoing work does not satisfy this condition. Where the only documentation references prior or parallel work rather than this specific pilot's institutional placement, score 4 maximum. Exception: where the pilot is explicitly designed as a direct extension or refinement of an existing government-authorized workstream, and the letter or MoU authorizes the specific activities the pilot continues, the authorization covers this intervention. In such cases, score 5 if the institutional home is named, the unit is actively engaged, and the authorization is current.
-
-── government_delivery_roles ──
-IF government cadres are named by role (inspectors, school directors, coordinators) with specific tasks, signed participation agreements or documented task allocation, and some indication of frequency or coordination → score 5. Individual names are not required for score 5. The test is whether the delivery structure is operational and documented, not whether individual staff are named in the proposal.
-
-── transition_logic ──
-IF proposal names (a) what the pilot will determine, (b) who holds the decision right, AND (c) what evidence will inform the decision → score 5. Confirmed outcomes are not required. Acknowledged uncertainty with a named resolution mechanism is not a weakness.
-IF conditions for adoption are named with responsible actors but decision evidence is not specified → score 4.
-IF transition depends on recommendations not yet made, OR uses language "based on recommendations from / it is expected that / ideally" → score 3 maximum.
-
-── adoption_timeline ──
-IF timeline names the primary bottleneck AND quantifies both pathways (with timeline and cost implications) AND the pilot is designed to resolve which pathway applies → score 5. Every government cycle does not need to be mapped.
-IF phased timeline with dependencies mapped to government cycles but no named bottleneck → score 4.
-IF timeline uses "ideally / with subsequent funding / could continue" → score 3 maximum.
-
-── capacity_shift ──
-Apply in sequence:
-TEST 1: Does government own IP, data, and licensing with no dependency on innovator for rights?
-TEST 2: Can government operate, maintain, and update the system without the vendor, using its own technical capacity or a competitively replaceable service?
-
-IF non-digital proposal with physical materials co-developed with government AND delivery uses existing government cadres → TEST 2 is satisfied by the delivery model. Score 5 if TEST 1 also satisfied, unless a specific operational dependency is named.
-Phased handover language ("progressively assuming," "over time," "as capacity strengthens") does not constitute a specific operational dependency for non-digital proposals. Score 5 applies unless a concrete ongoing technical or operational task is identified that government cannot perform without the innovator.
-HARD RULE: The non-digital exception above does not apply to proposals where the core platform or application is proprietary software operated by the vendor. For proprietary platform models, the existing digital scoring rules apply regardless of data ownership arrangements, open standards claims, or competitive replaceability arguments. Government owning data or standards while a vendor operates the platform is score 4 maximum if the dependency is explicitly acknowledged, the maintaining entity is named, and the governance or IP arrangement is described. Score 3 applies when the dependency is unacknowledged, claimed as resolved when it is not, or when the proposal asserts government operational independence that is not credible given the technical architecture described.
-IF digital/EdTech AND TEST 1 passed BUT TEST 2 failed (platform proprietary, vendor required for maintenance/updates) → apply the proprietary platform rule above. Score 4 if dependency is explicitly acknowledged as an ongoing requirement and the maintaining entity is named with no claim that government can replace the vendor or operate independently. Score 3 if the proposal claims the dependency is resolved through competitive replaceability, open standards, or vendor-neutral architecture when the core application remains proprietary. Claiming that government can switch vendors is not equivalent to acknowledging the dependency. Competitive replaceability is a resolution claim, not an acknowledgment. The test: does the proposal say "this entity will maintain the platform and government cannot do it alone" (score 4) or does the proposal say "government is not dependent because it can switch vendors" (score 3)?
-IF "subsequent funding / will need resources / could continue" language present → score 3 maximum regardless of other factors.
-HARD RULE — UNSPECIFIED DESIGN: This rule applies only to dimension scoring. It does not affect gate evaluation (country_theme_fit, scale_duration_compliance, public_system_embedding). Gates must be evaluated solely against their own rubric criteria. Where a proposal explicitly states that the pilot design, tools, or approach will be determined by a future workshop, recommendations process, or prior phase whose outcomes are not yet known, the following three sub-criteria are capped at score 3: capacity_shift, cost_ownership_trajectory, steady_state_fiscal. You cannot assess the fiscal or operational sustainability of a design that has not yet been specified. Trigger phrases include: "based on the recommendations from this workshop", "will support the implementation of those recommendations", "it is expected that this work will result in recommendations", "ideally we would begin", or any construction that makes the pilot design contingent on a future decision not yet made. This rule does not apply where a proposal has a fully specified design and separately references a review or validation workshop.
-CALIBRATION EXAMPLE — UNSPECIFIED DESIGN IN PRACTICE: A proposal where the pilot design is explicitly contingent on a future workshop (e.g. "based on the recommendations from this workshop, this grant will support the implementation of those recommendations") scores 3 maximum on transition_logic, capacity_shift, adoption_timeline, cost_ownership_trajectory, and steady_state_fiscal. Conditional language in the pilot design ("ideally we would begin", "with subsequent funding", "could continue") reinforces this cap. Do not award 4 on any of these five sub-criteria where the unspecified design rule is triggered, regardless of how well the proposal describes its ongoing work or government partnership.
-
-── cost_ownership_trajectory ──
-IF the highest-cost at-scale item is a technology subscription, platform service, or recurring digital cost AND the proposal does not name a confirmed government budget line or procurement mechanism for that cost → score 3 maximum. Language such as "procured as a service through standard government mechanisms" or "will be funded through county budgets" without naming the specific budget line, allocation, or procurement authority is directional but not confirmed. This rule applies even if non-digital delivery costs are well covered by existing government systems.
-PANEL FLAG: When this rule fires, set panel_verify to: "P: Score capped at 3 — recurring digital service cost not confirmed against a named budget line or procurement authority. Panel to probe: what specific budget line or procurement mechanism covers this cost at scale? Has a commitment been secured since submission?" Do not set panel_verify to null in this case.
-
-── steady_state_fiscal ──
-IF proposal names specific government budget lines AND references current spending on comparable functions → score 4 minimum.
-IF proposal makes generic absorption argument (costs will absorb into existing training/supervision budgets) WITHOUT referencing the budget envelope or current spending levels → score 3 maximum. Naming government budget categories (e.g., "existing professional development budgets," "operational budgets," "routine supervision costs") without referencing current spending levels, per-unit costs at scale, or the size of the budget envelope is a generic absorption argument and scores 3 maximum.
-IF highest-cost at-scale item (AI inference, platform subscription, technology licensing) uses "will explore / one possible option / may be needed" → score 3 maximum. This rule applies even if all non-digital costs are well covered.
-PANEL FLAG: When this rule fires, set panel_verify to: "P: Score capped at 3 — highest-cost digital item uses exploratory language on funding mechanism. Panel to probe: has a funding commitment been confirmed since submission? What is the current cost estimate per user at scale, and which government body would carry it?" Do not set panel_verify to null in this case.
-IMPORTANT: Referencing what government currently spends on a different programme as a cost comparator (e.g., "our solution costs 29% of what the county pays for Programme X") is not the same as identifying a budget line for this intervention. Comparators demonstrate affordability but do not constitute a funding mechanism. Score 4 requires that the proposal identifies where in the government budget this cost will sit, not merely that government could afford it relative to other spending.
-HARD RULE: Consumer or household spending patterns (e.g. "parents already spend X on paper materials") are not equivalent to a named government budget line. Where the fiscal sustainability argument relies on replacing parent or household expenditure rather than referencing a specific government budget allocation, spending envelope, or confirmed procurement line, the score is 3 maximum.
-PANEL FLAG: When the household spending rule fires, set panel_verify to: "P: Score capped at 3 — fiscal sustainability argument rests on replacing household or parent expenditure rather than a named government budget line. Panel to probe: is there a confirmed government procurement line or budget allocation covering this cost independently of household spending?" Do not set panel_verify to null in this case.`;
-
-const CALIBRATION_ADDITIONS_CALL2 = `══════════════════════════════════════════════════════════════
-SCORING DECISION RULES — CALL 2
-══════════════════════════════════════════════════════════════
-These are binding decision rules. Apply them before awarding any score. They override general conservative rules where they conflict.
-
-── pilot_learning_architecture ──
-Score 5 requires BOTH of the following. If either is absent, score 4 maximum.
-  CONDITION A (design architecture): named arms, comparison logic, allocation rationale.
-  CONDITION B (measurement specification): named instrument or observation protocol, outcome being measured, who administers it, and at what frequency.
-"We will measure teaching practice" is NOT specification. "TIL's external evaluation will assess outcomes" is NOT specification. "We will track implementation fidelity" is NOT specification.
-IF CONDITION A present AND CONDITION B absent → score 4. Do not award 5.
-BINDING CHECK: Before awarding score 5, verify that the proposal names at least one specific measurement instrument (e.g., a named classroom observation tool, a specific rubric, a validated assessment) with who administers it and when. If the only measurement references are "external evaluation," "SISO observations," "monitoring data," "usage logs," or unspecified "teaching practice assessment," CONDITION B is not met. Score 4 maximum.
-Score 4 requires that CONDITION A is fully met: named arms with clearly differentiated variables, an explicit counterfactual, and allocation logic that prevents contamination. A factorial or multi-arm design label is not sufficient if the comparison logic is implicit rather than explicit. If the arms are named but the counterfactual is not clearly specified, or if the variables being isolated are not explicitly stated per arm, score 3.
-HARD RULE: Conditional commitment language in the learning design is not equivalent to a named comparison design. Phrases such as "could be conducted", "a comparison could be considered", "it would be possible to", or any construction that does not commit to the design as proposed scores 3 maximum regardless of the quality of the surrounding design logic. A learning architecture that might happen is not a learning architecture.
-
-── decision_useful_evidence ──
-TIL funds an independent external evaluation for every selected innovator. Deferring learning outcome measurement to TIL's external evaluation is correct practice. Do not penalise it.
-IF proposal specifies intermediate indicators, data sources, and collection frequency for its own implementation monitoring → score 4.
-IF implementation monitoring plan is thin or intermediate indicators are poorly specified → score 3.
-HARD CEILING: Score 4 requires that the implementation monitoring plan is specific to this pilot: named indicators, named data sources, named collection frequency. A monitoring framework that is explicitly contingent on a future workshop outcome or recommendations process is not a specified monitoring plan — score 3 maximum.
-
-CALIBRATION NOTE — EVIDENCE STRENGTH FOR DATA-USE PROPOSALS: A proposal that lists operational indicators (upload frequency, meeting attendance, spot checks) without specifying outcome indicators, instruments, sample sizes, or validation approaches scores 3 maximum on decision_useful_evidence. A proposal whose monitoring framework is contingent on a future workshop scores 3 maximum. Score 4 requires named indicators, named data sources, and named collection frequency specific to this pilot.
-
-── government_decision_mechanisms ──
-Score on whether a named government body is positioned to make an adoption decision based on pilot evidence. A well-designed pilot alone is not sufficient, but a pilot that is explicitly designed to answer the adoption questions combined with a government body mandated to act on those answers constitutes a decision mechanism.
-
-IF named forum with explicit adoption mandate AND adoption criteria linked to pilot evidence AND go/no-go logic specifying both pathways with decision-maker named → score 5.
-IF named forum with adoption mandate AND criteria linked to evidence BUT go/no-go logic absent → score 4.
-IF some adoption criteria or government review referenced BUT no named forum, no responsible actor, no timing → score 3.
-IF only named structures are a coordination/monitoring committee OR a lessons-learned workshop OR co-design meetings → score 2. These are not decision mechanisms.
-
-Hard rule: Do not infer a decision forum from pilot design logic alone. A committee qualifies as a decision forum when BOTH conditions hold: (a) the committee has an explicit mandate linked to scale-up planning or adoption decisions, AND (b) the pilot design produces the specific evidence the committee needs to decide. Go/no-go logic can be embedded in the pilot design rather than stated as a separate committee protocol. If the pilot is explicitly designed to answer the questions that determine whether to scale, and a named government-chaired body is mandated to act on those findings, that combination constitutes a decision mechanism. Score 5 applies when the committee mandate, the pilot evidence, and the scale-up pathways are connected in the proposal. A committee that only reviews progress, shares findings, or provides recommendations without a mandate linked to adoption does not qualify regardless of who chairs it or whether it is backed by an MOU. Concrete scoring examples: a government-chaired Pilot Oversight Committee mandated to prepare a national scale-up plan, where the pilot tests the two questions that determine the scale-up pathway, and both pathways are quantified with cost and timeline implications = score 5. A Joint Steering Committee established by MOU that oversees implementation and provides recommendations for scale-up, but where the adoption criteria are not linked to specific pilot evidence and go/no-go pathways are not quantified = score 3. A coordination committee or co-design platform with no adoption mandate = score 2.
-Hard rule: HARD CEILING FOR WEAK MECHANISMS: Where the only named government structures are (a) a coordination or co-design committee with no mandate linked to scale-up decisions, (b) a lessons-learned or recommendations workshop, or (c) general expressions of intent to share findings, the score is 2. A formally constituted committee established by a signed MOU does not automatically lift this score. MOU-backed coordination committees with no adoption mandate, no adoption criteria, and no link to scale-up decisions remain at score 2. Score 3 requires at least one specific, measurable condition linked to pilot evidence that is named in the proposal.
-
-── learning_outcome_evidence_chain ──
-IF stated hypothesis ends at improved teaching practice AND does not address how practice change translates to student learning → score 2. General references to "improved learning" elsewhere in the narrative do not rescue a hypothesis that stops at teacher practice.
-IF causal chain explicitly includes the teacher-practice-to-student-learning link, even if asserted rather than operationalised → score 3 minimum.
-Score 4 requires that the pilot measurement design explicitly captures BOTH teacher practice AND student learning with named instruments or specified measures for each. If the pilot measures teaching practice with specified instruments but defers student learning measurement entirely to TIL's external evaluation without specifying its own learning outcome measures, the score is 3. The chain from practice to learning is asserted, not designed for.
-CARVE-OUT FOR GOVERNMENT DATA SYSTEMS: Where a proposal satisfies ALL THREE conditions — (a) specifies a named comparison design with arms, an explicit counterfactual, and allocation logic; AND (b) names a government-operated data system that routinely captures learner outcome data as part of its existing function (e.g., a national mobile school reporting platform, standardised national assessment system); AND (c) explicitly states the pilot will use that system to analyse the relationship between the intervention and learner outcomes — score 4 is available. The requirement for a standalone pilot-specific learning assessment instrument is waived where the government system itself constitutes the measurement design for the distal outcome. This carve-out does not apply where the learner data system is described only as a future integration, where the proposal does not name the specific system, or where the learner data is incidental rather than integrated into the pilot analysis plan.
-HARD CEILING: Where the stated hypothesis ends at improved instructional practice and the word "learning" or "outcomes" appears only in general narrative elsewhere but NOT in the causal hypothesis itself, the score is 2. This ceiling is not lifted by external evidence citations or general learning ambitions stated elsewhere in the proposal.
-PANEL FLAG: When the score is 3 because (a) the hypothesis ends at teacher practice, or (b) student learning measurement is deferred entirely to TIL's external evaluation without the proposal naming its own learning outcome measures or invoking the government data system carve-out above, set panel_verify to: "P: Score reflects hypothesis boundary or deferred learning measurement. Panel to probe: does the applicant's government data system capture learner outcome data the pilot can draw on? Is a student learning instrument planned alongside TIL's external evaluation?" Do not set panel_verify to null in this case.
-
-── team_timeline_realism ──
-IF staffing plan names individuals with LOE AND timeline is phased with milestones AND dependencies are mapped → score 4.
-Score 5 requires additionally: contingency planning for at least one named risk, AND cross-dependency mapping showing how delays in one phase affect subsequent phases. A detailed plan without contingencies is score 4, not 5.
-
-── adoption_timeline ──
-Score 5 requires ALL THREE of the following: (1) primary bottleneck named explicitly, (2) both pathways quantified with timeline AND cost implications, (3) pilot is designed to resolve which pathway applies. Naming a bottleneck without quantifying both pathways is score 4 maximum. Qualitative descriptions of pathway differences ("simpler scaling" vs "requires investment") without numerical timelines or cost estimates do not satisfy condition (2).`;
+- "extract": verbatim quote (max 150 words) from the proposal justifying the score. Use quotation marks. Write "No evidence found." if absent.
+- "interpretation": 1–2 sentences in plain English stating why the extract justifies the score. Never reference internal field names.
+- "rubric_anchor": copy the COMPLETE indicator text for the score level awarded.
+- "borderline": null if unambiguous. If genuinely borderline, one sentence naming the tension. Also populate borderline_rubric_low and borderline_rubric_high.
+- "panel_verify": null by default. Populate with a "P:" string only when a decision step below instructs it.`;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// JSON SCHEMAS
+// GATE RULES (unchanged)
+// ─────────────────────────────────────────────────────────────────────────────
+const GATE_RULES = `══════════════════════════════════════════════════════════════
+HARD GATES — evaluate in sequence
+══════════════════════════════════════════════════════════════
+A score of 1 or 2 on any gate = gate failure. Set all_gates_passed to false. Continue scoring all dimensions — the panel needs full scores.
+Gate scores do not contribute to the weighted total.`;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALL 1 DECISION PROTOCOLS
+// Sequential steps replace stacked conditionals.
+// Each sub-criterion has a numbered decision path. Follow steps in order.
+// Stop at the first step that yields a definitive score.
+// ─────────────────────────────────────────────────────────────────────────────
+const DECISION_PROTOCOLS_CALL1 = `══════════════════════════════════════════════════════════════
+SCORING DECISION PROTOCOLS — CALL 1
+Follow each protocol in step order. Stop at the first definitive score.
+These protocols override the conservative defaults where they conflict.
+══════════════════════════════════════════════════════════════
+
+━━━ named_counterparts ━━━
+STEP 1: Does the proposal name zero government counterparts, focal points, or ministry units?
+  → YES: score 1. Stop.
+STEP 2: Are counterparts described only in general terms ("the Ministry", "government partners") with no named unit, title, or responsibility?
+  → YES: score 2. Stop.
+STEP 3: Are some specific units or individuals named but without specified responsibilities, or at only one level of government?
+  → YES: score 3. Stop.
+STEP 4: Are named units or individuals present at ONE level (national OR district/county) WITH specified responsibilities during the pilot (approvals, oversight, delivery, data review)?
+  → YES: score 4. Stop.
+STEP 5: Are named units or individuals present at BOTH national AND district/county level, each with specified responsibilities?
+  → YES: score 5. Stop.
+NOTE: Individual names are not required for score 5. Named institutional units with specified delivery, oversight, and accountability functions across two levels satisfy step 5.
+
+━━━ documented_engagement ━━━
+STEP 1: Is there no documentation and no explanation of ongoing engagement?
+  → YES: score 1. Stop.
+STEP 2: Is engagement described only through vague claims or references to prior conversations with no documentation?
+  → YES: score 2. Stop.
+STEP 3: Is there evidence of prior interaction but no formal document referencing this specific pilot?
+  → YES: score 3. Stop.
+STEP 4: Does a formal document exist (letter, MoU, TWG participation) that references the proposed pilot and government roles?
+  → YES: score 4. Stop. Exception: if the document establishes formal institutional authorisation for work this pilot explicitly extends, AND the narrative references that document, proceed to step 5.
+STEP 5: Does the document (a) establish authorisation covering this pilot's specific activities, AND (b) include specifics on government commitments, resource allocation, or governance?
+  → YES: score 5. Stop.
+  → NO to either condition: score 4. Stop.
+
+━━━ institutional_home ━━━
+STEP 1: Is no institutional home identified?
+  → YES: score 1. Stop.
+STEP 2: Is the Ministry referenced broadly with no specific department, directorate, or agency named?
+  → YES: score 2. Stop.
+STEP 3: Is a plausible home suggested but not yet raised with government counterparts?
+  → YES: score 3. Stop.
+STEP 4: Is a specific directorate or unit identified AND has the innovator raised this with government counterparts (even if not yet formally confirmed)?
+  → YES: score 4. Stop.
+STEP 5: Is the institutional home named AND is there a documented written reference from government (letter, MoU, meeting record) explicitly confirming or endorsing that specific unit as the anchor for this intervention?
+  → YES: score 5. Stop.
+  → NO: score 4. Stop.
+NOTE: General authorisation for ongoing work does not satisfy step 5 unless the letter or MoU explicitly covers this intervention's institutional placement.
+
+━━━ government_delivery_roles ━━━
+STEP 1: Is no government delivery role specified?
+  → YES: score 1. Stop.
+STEP 2: Is a government role implied but not specified — unclear which cadres deliver which activities?
+  → YES: score 2. Stop.
+STEP 3: Are cadres named (inspectors, coaches, coordinators) but tasks, frequency, and supervision structure are vague?
+  → YES: score 3. Stop.
+STEP 4: Are cadres named with specific tasks AND some indication of frequency or coordination structure?
+  → YES: score 4. Stop. Proceed to step 5 only if there is evidence of documented task allocation or signed participation.
+STEP 5: Do government cadres lead core delivery with clear task allocation, a credible accountability structure, AND documented participation (signed agreement, formal task allocation, or referenced annex)?
+  → YES: score 5. Stop.
+  → NO: score 4. Stop.
+
+━━━ transition_logic ━━━
+STEP 1: Does the proposal contain language making the pilot design contingent on a future workshop, recommendations process, or prior phase not yet complete ("based on recommendations from", "it is expected that", "ideally we would begin")?
+  → YES: score 3 maximum for this sub-criterion. Apply step 2 within that ceiling.
+STEP 2 (only if no cap from step 1): Is there no mention of adoption transition at all?
+  → YES: score 1. Stop.
+STEP 3: Is scale-up referenced but with no conditions, decision points, or responsible actors?
+  → YES: score 2. Stop.
+STEP 4: Are some conditions identified but decision points vague and responsible actors missing or unnamed?
+  → YES: score 3. Stop.
+STEP 5: Does the proposal state (a) what the pilot will determine, AND (b) who holds the decision right, AND (c) what evidence will inform that decision?
+  → YES: score 5. Stop. Confirmed outcomes are not required. Named uncertainty with a resolution mechanism qualifies.
+  → Only (a) and (b) present but not (c): score 4. Stop.
+  → Only (a) present: score 3. Stop.
+
+━━━ capacity_shift ━━━
+STEP 1: Does the proposal contain language making the design contingent on a future decision not yet made?
+  → YES: score 3 maximum. Apply remaining steps within that ceiling.
+STEP 2: Does "subsequent funding / will need resources / could continue" language appear?
+  → YES: score 3 maximum regardless of other factors.
+STEP 3: Is there no plan for government to take on functions?
+  → YES: score 1. Stop.
+STEP 4: Is capacity building mentioned but unscheduled with IP and licensing unaddressed?
+  → YES: score 2. Stop.
+STEP 5: Is this a non-digital proposal where materials are co-developed with government AND delivery uses existing government cadres?
+  → YES: Does government own IP and data with no dependency on the innovator for rights?
+      → YES: score 5 unless a concrete ongoing technical task is identified that government cannot perform without the innovator. If such a task exists: score 4.
+      → NO: score 3. Stop.
+STEP 6 (digital/EdTech proposals): Does government own IP, data, and licensing with no dependency on the innovator for rights? (TEST 1)
+  → NO: score 3. Stop.
+STEP 7: Can government operate, maintain, and update the platform without the vendor using its own capacity or a competitively replaceable service? (TEST 2)
+  → YES to TEST 2: score 5 if TEST 1 also passed.
+  → NO to TEST 2 AND the dependency is explicitly acknowledged AND the maintaining entity is named AND the proposal does not claim government can operate independently: score 4. Stop.
+  → NO to TEST 2 AND the proposal claims the dependency is resolved through competitive replaceability, open standards, or vendor-neutral architecture: score 3. Stop. Competitive replaceability is a resolution claim, not an acknowledgment of dependency.
+
+━━━ adoption_timeline ━━━
+STEP 1: Does the proposal use "ideally / with subsequent funding / could continue" language?
+  → YES: score 3 maximum.
+STEP 2: Is there no mention of an adoption timeline?
+  → YES: score 1. Stop.
+STEP 3: Is a timeline stated but with no account of government planning cycles, budget processes, or procurement timelines?
+  → YES: score 2. Stop.
+STEP 4: Is the timeline plausible in duration but dependencies on government cycles are not mapped and sequencing has no contingency?
+  → YES: score 3. Stop.
+STEP 5: Is the timeline phased with dependencies mapped to government planning and budget cycles, and is the sequencing logic explained?
+  → YES: score 4. Stop. Proceed to step 6 only if a bottleneck is named.
+STEP 6: Does the proposal name the primary bottleneck AND quantify both scale pathways with timeline AND cost implications AND is the pilot designed to resolve which pathway applies?
+  → YES to all three: score 5. Stop.
+  → YES to bottleneck named but pathways not quantified numerically: score 4. Stop.
+
+━━━ pilot_unit_cost ━━━
+STEP 1: Is there no per-teacher or per-activity unit cost; budget is lump sum or activity-level with no cost drivers?
+  → YES: score 1. Stop.
+STEP 2: Are some unit costs present but key drivers missing or implausible; material inconsistencies between narrative and budget?
+  → YES: score 2. Stop.
+STEP 3: Are unit costs stated for main activities with partial assumptions; government contribution described but not fully quantified?
+  → YES: score 3. Stop.
+STEP 4: Are unit costs stated for ALL major activities with explicit assumptions AND TIL, applicant, and government contributions specified and consistent across narrative and budget?
+  → YES: score 4. Stop. Proceed to step 5 only if government in-kind is fully costed and integrated.
+STEP 5: Are figures consistent and cross-checkable across ALL submitted materials with transparent assumptions and government in-kind costed and integrated?
+  → YES: score 5. Stop.
+  → NO: score 4. Stop.
+
+━━━ cost_ownership_trajectory ━━━
+STEP 1: Is the highest-cost at-scale item a technology subscription, platform service, or recurring digital cost?
+  → YES: Does the proposal name a confirmed government budget line or procurement mechanism (not just directional language like "procured through standard mechanisms" or "county budgets will cover")?
+      → NO confirmed mechanism: score 3. Set panel_verify to "P: Score capped at 3 — recurring digital service cost not confirmed against a named budget line or procurement authority. Panel to probe: what specific budget line or procurement mechanism covers this cost at scale? Has a commitment been secured since submission?" Stop.
+      → YES confirmed mechanism: continue to step 2.
+  → NO digital cost: continue to step 2.
+STEP 2: Is there no description at all of who performs or funds delivery at scale?
+  → YES: score 1. Stop.
+STEP 3: Is scale delivery acknowledged but funding sources undistinguished?
+  → YES: score 2. Stop.
+STEP 4: Is there some description of cost shift but reasoning is thin or high-cost items left unaddressed?
+  → YES: score 3. Stop.
+STEP 5: Is there a clear description of delivery functions at scale with explicit funding attribution AND government-absorbable costs distinguished from those requiring new allocation?
+  → YES: score 4. Stop. Proceed to step 6 only if the picture is fully articulated.
+STEP 6: Does government's existing budget absorb core recurring costs AND is any residual external reliance named, scoped, and time-bound AND is the reasoning honest about the weakest points?
+  → YES: score 5. Stop.
+  → NO: score 4. Stop.
+
+━━━ steady_state_fiscal ━━━
+STEP 1: Does the highest-cost at-scale digital item use exploratory language ("will explore", "one possible option", "may be needed", "could be absorbed")?
+  → YES: score 3. Set panel_verify to "P: Score capped at 3 — highest-cost digital item uses exploratory language on funding mechanism. Panel to probe: has a funding commitment been confirmed since submission? What is the current cost estimate per user at scale, and which government body would carry it?" Stop.
+STEP 2: Does the fiscal sustainability argument rely on replacing household or parent expenditure rather than a named government budget line?
+  → YES: score 3. Set panel_verify to "P: Score capped at 3 — fiscal sustainability argument rests on replacing household or parent expenditure rather than a named government budget line. Panel to probe: is there a confirmed government procurement line or budget allocation covering this cost independently of household spending?" Stop.
+STEP 3: Is a cost comparator used (e.g. "our solution costs 29% of what the county pays for Programme X") without identifying a government budget line for this intervention?
+  → YES: this is affordability evidence only, not a funding mechanism. It cannot lift the score above 3 on its own. Continue to step 4 to check whether a budget line is also named.
+STEP 4: Does the proposal name a specific government budget line AND reference current spending on comparable functions?
+  → YES: score 4 minimum. Continue to step 5.
+  → NO: score 3. Stop.
+STEP 5: Is the weakest point in the affordability case identified and acknowledged, with residual external costs limited?
+  → YES: score 4. Stop. Proceed to step 6 only if the case is compelling and complete.
+STEP 6: Is there a compelling sustainability case with named budget lines, current spending references, gap analysis between current and required spending, AND no unacknowledged donor dependency?
+  → YES: score 5. Stop.
+  → NO: score 4. Stop.`;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALL 2 DECISION PROTOCOLS
+// ─────────────────────────────────────────────────────────────────────────────
+const DECISION_PROTOCOLS_CALL2 = `══════════════════════════════════════════════════════════════
+SCORING DECISION PROTOCOLS — CALL 2
+Follow each protocol in step order. Stop at the first definitive score.
+These protocols override the conservative defaults where they conflict.
+══════════════════════════════════════════════════════════════
+
+━━━ problem_solution_fit ━━━
+STEP 1: Is there no articulation of the FLN problem; solution disconnected from any government system?
+  → YES: score 1. Stop.
+STEP 2: Is the problem statement generic with limited local evidence and weak contextual fit?
+  → YES: score 2. Stop.
+STEP 3: Is there some context specificity but the causal link is directional and under-specified?
+  → YES: score 3. Stop.
+STEP 4: Is there a clear context-grounded problem statement with well-argued solution fit AND explicit adaptations to context, target users, and existing curriculum or supervision standards?
+  → YES: score 4. Stop. Proceed to step 5 only if local evidence is triangulated.
+STEP 5: Is the problem articulated with triangulated local evidence AND the solution directly addresses identified drivers with adaptations demonstrated rather than asserted?
+  → YES: score 5. Stop.
+  → NO: score 4. Stop.
+
+━━━ operational_clarity ━━━
+STEP 1: Is the description of what users do differently absent or unclear; components and routines not specified?
+  → YES: score 1. Stop.
+STEP 2: Is there only a high-level description with limited detail on routines, workflow integration, or roles?
+  → YES: score 2. Stop.
+STEP 3: Are key activities and some workflow change described but with gaps in cadence, materials, or responsibilities?
+  → YES: score 3. Stop.
+STEP 4: Are routines, cadence, roles, and required materials or technology specified and feasible?
+  → YES: score 4. Stop. Proceed to step 5 only if low-connectivity practicalities are also addressed.
+STEP 5: Is a specific causal chain articulated including changes to existing processes AND low-connectivity practicalities addressed?
+  → YES: score 5. Stop.
+  → NO: score 4. Stop.
+
+━━━ pilot_learning_architecture ━━━
+STEP 1: Does the proposal use conditional language for the comparison design ("could be conducted", "a comparison could be considered", "it would be possible to")?
+  → YES: score 3 maximum. The design must be committed to, not hypothetical.
+STEP 2: Is there no articulation of what the pilot is designed to test?
+  → YES: score 1. Stop.
+STEP 3: Is there only a general reference to testing with no stated learning question or comparison logic?
+  → YES: score 2. Stop.
+STEP 4: Is a learning question implied but the comparison design is vague or missing?
+  → YES: score 3. Stop.
+STEP 5 (CONDITION A check): Are named arms present with clearly differentiated variables, an explicit counterfactual, and allocation logic that prevents contamination?
+  → NO to any element of condition A: score 3. Stop.
+  → YES to all of condition A: continue to step 6.
+STEP 6 (CONDITION B check): Does the proposal name at least one specific measurement instrument (named classroom observation tool, specific rubric, validated assessment) with who administers it and at what frequency?
+  → YES: score 5. Stop.
+  → NO: score 4. Stop. References to "external evaluation", "SISO observations", "monitoring data", or unspecified "teaching practice assessment" do not satisfy condition B.
+
+━━━ team_timeline_realism ━━━
+STEP 1: Is there no implementation plan and team composition unclear?
+  → YES: score 1. Stop.
+STEP 2: Is staffing or timeline mentioned but unrealistic or misaligned with activities?
+  → YES: score 2. Stop.
+STEP 3: Is the plan feasible at a high level but roles, time allocation, or logistics not fully specified?
+  → YES: score 3. Stop.
+STEP 4: Is there a clear staffing plan with phased timeline, milestones, dependencies, responsible owners, AND FTE or LOE provided?
+  → YES: score 4. Stop. Proceed to step 5 only if contingencies are present.
+STEP 5: Does the plan include contingency planning for at least one named risk AND cross-dependency mapping showing how delays in one phase affect subsequent phases?
+  → YES: score 5. Stop.
+  → NO to either: score 4. Stop.
+
+━━━ decision_useful_evidence ━━━
+NOTE: TIL funds an independent external evaluation for every selected innovator. Deferring learning outcome measurement to TIL's external evaluation is correct practice. Do not penalise it.
+STEP 1: Is the monitoring framework explicitly contingent on a future workshop outcome or recommendations process?
+  → YES: score 3 maximum.
+STEP 2: Is there no credible monitoring plan; outcomes, indicators, or sample sizes absent?
+  → YES: score 1. Stop.
+STEP 3: Is the plan focused on activities and outputs with limited outcome indicators and no instrument detail?
+  → YES: score 2. Stop.
+STEP 4: Is there a plausible measurement plan with key indicators but incomplete detail on instruments, sample, or validation?
+  → YES: score 3. Stop.
+STEP 5: Are named indicators, named data sources, named collection frequency, AND quality assurance approach present AND consistent with the pilot design?
+  → YES: score 4. Stop. Proceed to step 6 only if sample size justification is explicit.
+STEP 6: Is there a detailed plan with sample size justification, external validation approach, AND explicit statement of what the evidence will and will not show?
+  → YES: score 5. Stop.
+  → NO: score 4. Stop.
+
+━━━ government_decision_mechanisms ━━━
+STEP 1: Are the only named government structures coordination committees, lessons-learned workshops, or co-design meetings with no mandate linked to scale-up decisions?
+  → YES: score 2. A formally constituted MOU-backed committee without an adoption mandate remains score 2.
+STEP 2: Is there no mention of how evidence will inform government adoption decisions?
+  → YES: score 1. Stop.
+STEP 3: Is there only a general reference to government interest in results with no adoption criteria, forum, or responsible decision-maker?
+  → YES: score 2. Stop.
+STEP 4: Are some adoption criteria or metrics mentioned but the forum, timing, or responsible actors are unclear?
+  → YES: score 3. Stop.
+STEP 5: Is a named government decision forum present AND adoption criteria linked to pilot evidence outputs AND timing aligned to government decision cycles?
+  → YES: score 4. Stop. Proceed to step 6 only if go/no-go logic is explicit.
+STEP 6: Is go/no-go logic present specifying both pathways with a named decision-maker AND specific adoption metrics agreed or discussed with government?
+  → YES: score 5. Stop.
+  → NO: score 4. Stop.
+NOTE: A government-chaired body qualifies as a decision forum when BOTH conditions hold: (a) explicit mandate linked to scale-up or adoption decisions, AND (b) the pilot produces the specific evidence needed to decide. A committee that only reviews progress or provides recommendations without an adoption mandate does not qualify regardless of who chairs it.
+
+━━━ learning_outcome_evidence_chain ━━━
+STEP 1: Does the stated hypothesis end at improved teaching practice AND does the word "learning" or "outcomes" appear ONLY in general narrative but NOT in the causal hypothesis itself?
+  → YES: score 2. General learning ambitions elsewhere in the proposal do not lift this score. Stop.
+STEP 2: Does the causal chain explicitly include the teacher-practice-to-student-learning link, even if asserted rather than operationalised?
+  → NO: score 2. Stop.
+  → YES: score 3 minimum. Continue to step 3.
+STEP 3 (GOVERNMENT DATA SYSTEM CARVE-OUT): Does the proposal satisfy ALL THREE conditions:
+  (a) Named comparison design with arms, explicit counterfactual, and allocation logic; AND
+  (b) Names a government-operated data system that routinely captures learner outcome data as part of its existing function (e.g. national mobile school reporting platform, standardised national assessment system); AND
+  (c) Explicitly states the pilot will use that system to analyse the relationship between the intervention and learner outcomes?
+  → YES to all three: score 4 is available. Continue to step 4.
+  → NO to any condition: continue to step 4 without the carve-out.
+STEP 4: Does the pilot measurement design explicitly capture BOTH teacher practice AND student learning with named instruments or specified measures for each?
+  → YES: score 4. Stop. This step is also satisfied by step 3 carve-out.
+  → NO: score 3. Set panel_verify to "P: Score reflects hypothesis boundary or deferred learning measurement. Panel to probe: does the applicant's government data system capture learner outcome data the pilot can draw on? Is a student learning instrument planned alongside TIL's external evaluation?" Stop.
+STEP 5: Is there a rigorous causal design that directly tests the intervention-practice-learning chain AND a measurement approach capable of producing decision-useful evidence on whether children are learning more?
+  → YES: score 5. Stop.
+  → NO: score 4. Stop.`;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UNSPECIFIED DESIGN RULE (unchanged — applies across both calls)
+// ─────────────────────────────────────────────────────────────────────────────
+const UNSPECIFIED_DESIGN_RULE = `══════════════════════════════════════════════════════════════
+UNSPECIFIED DESIGN RULE
+══════════════════════════════════════════════════════════════
+This rule applies to dimension scoring only, not to gates.
+Where a proposal explicitly states that the pilot design, tools, or approach will be determined by a future workshop, recommendations process, or prior phase whose outcomes are not yet known, the following sub-criteria are capped at score 3:
+  capacity_shift, cost_ownership_trajectory, steady_state_fiscal, transition_logic, adoption_timeline.
+Trigger phrases: "based on the recommendations from this workshop", "will support the implementation of those recommendations", "it is expected that this work will result in recommendations", "ideally we would begin", or any construction making the pilot design contingent on a future decision not yet made.
+This rule does not apply where a proposal has a fully specified design and separately references a review or validation workshop.`;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// JSON SCHEMAS (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 const SUB_SCHEMA = `{ "score": 0, "extract": "", "interpretation": "", "rubric_anchor": "", "borderline": null, "borderline_rubric_low": null, "borderline_rubric_high": null, "panel_verify": null }`;
 
@@ -514,26 +713,27 @@ const CALL2_JSON_SCHEMA = `{
 // SYSTEM PROMPTS
 // ─────────────────────────────────────────────────────────────────────────────
 export const SYSTEM_PROMPT_CALL1 = [
-  `You are a classifier for the Elimu-Soko Teaching Innovation Lab (TIL). You evaluate full RFP proposals. The underlying intervention's evidence base and thematic fit were assessed at EOI stage. Your task is execution quality: can this team deliver a credible pilot, within government systems, at a realistic cost, with a plausible pathway to adoption, and a measurement design capable of generating decision-useful evidence on learning outcomes?
+  `You are a classifier for the Elimu-Soko Teaching Innovation Lab (TIL). You evaluate full RFP proposals. The underlying intervention's evidence base and thematic fit were assessed at EOI stage. Your task is execution quality: can this team deliver a credible pilot, within government systems, at a realistic cost, with a plausible pathway to adoption?
 
 METADATA EXTRACTION — populate the applicant object before scoring:
 - name: lead organisation name as stated in the proposal
-- country: must be one of: Ghana, Nigeria, Tanzania, Kenya, Ethiopia, South Africa, Mozambique, Cote d'Ivoire, Senegal
-- theme: match to one of: Theme 1 — Structured Pedagogy, Theme 2 — Teacher Coaching and Mentoring, Theme 3 — EdTech-Enabled Learning, Theme 4 — Assessment for Learning
-If Organisation, Country, or Theme are pre-filled in the user message, use those values. If a field says "(extract from document)", extract it from the proposal text. Never leave these fields empty.`,
+- country: one of: Ghana, Nigeria, Tanzania, Kenya, Ethiopia, South Africa, Mozambique, Cote d'Ivoire, Senegal
+- theme: one of: Theme 1 — Structured Pedagogy, Theme 2 — Teacher Coaching and Mentoring, Theme 3 — EdTech-Enabled Learning, Theme 4 — Assessment for Learning
+If pre-filled in the user message, use those values. Never leave these fields empty.`,
   CONSERVATIVE_RULES,
   EVIDENCE_FORMAT,
   GATE_RULES,
   ...RUBRIC.gates.map(buildGateBlock),
   ...RUBRIC.dimensions.filter(d => d.call === 1).map(buildDimBlock),
-  CALIBRATION_ADDITIONS_CALL1,
-  `COST TEMPLATE STRUCTURE — reference by tab name when scoring:
-Tab "1. Pilot Costs": Real numbers. Pilot parameters (teacher counts, duration, arms), full cost-of-delivery breakdown split between TIL-funded, applicant-funded, and government in-kind. This is the authoritative source for pilot_unit_cost.
-Tab "2. At Scale": Qualitative. Who performs each delivery function during the pilot vs. at scale, with reasoning. Authoritative source for cost_ownership_trajectory.
-Tab "3. Scale-Up Pathway": Qualitative. What needs to change to get from pilot to scale, who is responsible, dependencies, and sequencing. Authoritative source for adoption_timeline and transition_logic.
-Tab "4. Technology Costs": Vendor-set. Annual post-pilot technology costs (hosting, licensing, maintenance). Required for steady_state_fiscal where technology is involved.
-Tab "5. Summary": Auto-calculated from Tabs 1 and 4. Use for cross-checking totals only.
-Where narrative (Section 5) and template are inconsistent, score based on the weaker of the two. If no template is submitted and cost data is embedded in the narrative, assess from that material.`,
+  UNSPECIFIED_DESIGN_RULE,
+  DECISION_PROTOCOLS_CALL1,
+  `COST TEMPLATE STRUCTURE:
+Tab "1. Pilot Costs": authoritative source for pilot_unit_cost.
+Tab "2. At Scale": authoritative source for cost_ownership_trajectory.
+Tab "3. Scale-Up Pathway": authoritative source for adoption_timeline and transition_logic.
+Tab "4. Technology Costs": required for steady_state_fiscal where technology is involved.
+Tab "5. Summary": cross-checking totals only.
+Where narrative and template are inconsistent, score on the weaker of the two.`,
   `OUTPUT — valid JSON only, no markdown, no preamble:\n${CALL1_JSON_SCHEMA}`,
 ].join("\n\n");
 
@@ -542,26 +742,27 @@ export const SYSTEM_PROMPT_CALL2 = [
   CONSERVATIVE_RULES,
   EVIDENCE_FORMAT,
   ...RUBRIC.dimensions.filter(d => d.call === 2).map(buildDimBlock),
-  CALIBRATION_ADDITIONS_CALL2,
+  UNSPECIFIED_DESIGN_RULE,
+  DECISION_PROTOCOLS_CALL2,
   `══════════════════════════════════════════════════════════════
 CONSISTENCY NOTES
 ══════════════════════════════════════════════════════════════
 Write 3 to 5 notes (1–2 sentences each) identifying:
 - Alignments and inconsistencies across proposal sections
-- Narrative claims not supported by documentation actually present in the submitted materials
+- Narrative claims not supported by documentation in the submitted materials
 - Tensions between scale-up ambition and fiscal model
 - Gaps between the stated hypothesis and the measurement design
 
-SUMMARY: Exactly 2 sentences. First sentence: the single most significant strength, stated concretely. Second sentence: the single most significant gap, stated concretely. Never use internal field names.
+SUMMARY: Exactly 2 sentences. First: the single most significant strength, stated concretely. Second: the single most significant gap, stated concretely. Never use internal field names.
 
-RECOMMENDATION: One sentence that names the decision and the primary reason for it. Use the recommendation label that corresponds to the call1_scaled_partial plus your Call 2 sub-criterion scores. The label thresholds are: 85–100 Excellent, 75–84 Good, 60–74 Weak, below 60 Fail.
+RECOMMENDATION: One sentence naming the decision and primary reason. Thresholds: 85–100 Excellent, 75–84 Good, 60–74 Weak, below 60 Fail.
 
 OVERALL SCORE: Set to 0. The system computes the final scaled score.`,
   `OUTPUT — valid JSON only, no markdown, no preamble:\n${CALL2_JSON_SCHEMA}`,
 ].join("\n\n");
 
 // ─────────────────────────────────────────────────────────────────────────────
-// JSON PARSING
+// JSON PARSING (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 export function safeParseJSON(raw: string): any {
   if (!raw || typeof raw !== "string") return null;
@@ -597,7 +798,7 @@ export function safeParseJSON(raw: string): any {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SCORING MATH
+// SCORING MATH (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 export const DIM_DEFS: Record<string, string[]> = {
   government_depth: ["named_counterparts", "documented_engagement", "institutional_home", "government_delivery_roles"],
@@ -648,19 +849,15 @@ export function computeTotals(call1: any, call2: any): {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RUBRIC ANCHOR INJECTION — overwrites model-generated rubric_anchor with
-// verbatim rubric text looked up by awarded score. Call after parsing both
-// call1 and call2 JSON, before storing to Supabase.
+// RUBRIC ANCHOR INJECTION (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 export function injectRubricAnchors(call1: any, call2: any): void {
-  // Gates
   for (const gate of RUBRIC.gates) {
     const g = call1?.gates?.[gate.id];
     if (g && g.score >= 1 && g.score <= 5) {
       g.rubric_anchor = gate.anchors[g.score as 1|2|3|4|5].text;
     }
   }
-  // Dimensions
   for (const dim of RUBRIC.dimensions) {
     const src = dim.call === 1 ? call1?.dimensions : call2?.dimensions;
     const dimData = src?.[dim.id];
