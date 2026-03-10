@@ -1,5 +1,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// TIL RFP Classifier Engine v4.0 — sequential decision protocol rebuild
+// TIL RFP Classifier Engine v4.1 — step boundary fixes
+//
+// What changed from v4.0:
+//   1. named_counterparts: step 4 no longer stops; forces explicit two-level check
+//   2. government_delivery_roles: step 4 no longer stops; forces documentation check
+//   3. cost_ownership_trajectory: step 1 enumerates non-qualifying phrases by name
+//      including "procured as a service through standard government mechanisms" and
+//      deferred financial agreements
+//   4. steady_state_fiscal: steps 1-3 tightened; household comparator and programme
+//      comparator explicitly named as non-qualifying; mandatory score 3 where both apply
 //
 // What changed from v3.4.1:
 //   - Stacked IF/AND/BUT/UNLESS conditional rules replaced with explicit
@@ -387,10 +396,11 @@ STEP 2: Are counterparts described only in general terms ("the Ministry", "gover
 STEP 3: Are some specific units or individuals named but without specified responsibilities, or at only one level of government?
   → YES: score 3. Stop.
 STEP 4: Are named units or individuals present at ONE level (national OR district/county) WITH specified responsibilities during the pilot (approvals, oversight, delivery, data review)?
-  → YES: score 4. Stop.
+  → YES: before stopping at 4, check step 5.
 STEP 5: Are named units or individuals present at BOTH national AND district/county level, each with specified responsibilities?
   → YES: score 5. Stop.
-NOTE: Individual names are not required for score 5. Named institutional units with specified delivery, oversight, and accountability functions across two levels satisfy step 5.
+  → NO: score 4. Stop.
+NOTE: Individual names are not required for score 5. Named institutional units with specified delivery, oversight, and accountability functions across two levels satisfy step 5. Example: a Deputy Director-General chairing a monthly Pilot Oversight Committee (national) AND District Directors of Education as committee members with district oversight responsibilities (district) = score 5.
 
 ━━━ documented_engagement ━━━
 STEP 1: Is there no documentation and no explanation of ongoing engagement?
@@ -427,10 +437,11 @@ STEP 2: Is a government role implied but not specified — unclear which cadres 
 STEP 3: Are cadres named (inspectors, coaches, coordinators) but tasks, frequency, and supervision structure are vague?
   → YES: score 3. Stop.
 STEP 4: Are cadres named with specific tasks AND some indication of frequency or coordination structure?
-  → YES: score 4. Stop. Proceed to step 5 only if there is evidence of documented task allocation or signed participation.
+  → YES: before stopping at 4, check step 5.
 STEP 5: Do government cadres lead core delivery with clear task allocation, a credible accountability structure, AND documented participation (signed agreement, formal task allocation, or referenced annex)?
   → YES: score 5. Stop.
-  → NO: score 4. Stop.
+  → NO to documented participation: score 4. Stop.
+NOTE: Example of score 5 — SISOs conducting routine PLC monitoring visits on a defined schedule, with GES retaining ownership of all key implementation decisions and District Directors named as committee members with formal oversight responsibilities = score 5.
 
 ━━━ transition_logic ━━━
 STEP 1: Does the proposal contain language making the pilot design contingent on a future workshop, recommendations process, or prior phase not yet complete ("based on recommendations from", "it is expected that", "ideally we would begin")?
@@ -496,7 +507,14 @@ STEP 5: Are figures consistent and cross-checkable across ALL submitted material
 
 ━━━ cost_ownership_trajectory ━━━
 STEP 1: Is the highest-cost at-scale item a technology subscription, platform service, or recurring digital cost?
-  → YES: Does the proposal name a confirmed government budget line or procurement mechanism (not just directional language like "procured through standard mechanisms" or "county budgets will cover")?
+  → YES: Does the proposal name a confirmed government budget line or procurement mechanism?
+      A confirmed mechanism names the specific budget line, allocation authority, or signed procurement commitment.
+      The following phrases are directional and do NOT constitute a confirmed mechanism:
+        "procured as a service through standard government mechanisms"
+        "county budgets will cover" / "will be funded through existing budgets"
+        "no new budget allocation is needed"
+        "government will absorb" without a named line item
+      Additionally: if the MOU or any referenced agreement explicitly defers financial terms to a future agreement ("a separate agreement shall be developed"), no confirmed mechanism exists regardless of other language.
       → NO confirmed mechanism: score 3. Set panel_verify to "P: Score capped at 3 — recurring digital service cost not confirmed against a named budget line or procurement authority. Panel to probe: what specific budget line or procurement mechanism covers this cost at scale? Has a commitment been secured since submission?" Stop.
       → YES confirmed mechanism: continue to step 2.
   → NO digital cost: continue to step 2.
@@ -515,10 +533,12 @@ STEP 6: Does government's existing budget absorb core recurring costs AND is any
 ━━━ steady_state_fiscal ━━━
 STEP 1: Does the highest-cost at-scale digital item use exploratory language ("will explore", "one possible option", "may be needed", "could be absorbed")?
   → YES: score 3. Set panel_verify to "P: Score capped at 3 — highest-cost digital item uses exploratory language on funding mechanism. Panel to probe: has a funding commitment been confirmed since submission? What is the current cost estimate per user at scale, and which government body would carry it?" Stop.
-STEP 2: Does the fiscal sustainability argument rely on replacing household or parent expenditure rather than a named government budget line?
+STEP 2: Does the fiscal sustainability argument rely primarily on replacing household or parent expenditure rather than a named government budget line?
   → YES: score 3. Set panel_verify to "P: Score capped at 3 — fiscal sustainability argument rests on replacing household or parent expenditure rather than a named government budget line. Panel to probe: is there a confirmed government procurement line or budget allocation covering this cost independently of household spending?" Stop.
-STEP 3: Is a cost comparator used (e.g. "our solution costs 29% of what the county pays for Programme X") without identifying a government budget line for this intervention?
-  → YES: this is affordability evidence only, not a funding mechanism. It cannot lift the score above 3 on its own. Continue to step 4 to check whether a budget line is also named.
+  NOTE: "Parents already spend KES X on paper materials" or equivalent is household expenditure. It is not a government budget line regardless of the cost comparison it enables.
+STEP 3: Is a cost comparator used to argue affordability (e.g. "our solution costs 29% of what the county pays for Programme X") without identifying a government budget line for this intervention?
+  → YES: this is affordability evidence only, not a funding mechanism. A comparator showing government already spends more on a different programme does not confirm a budget line for this intervention. It cannot lift the score above 3 on its own. Continue to step 4 to check whether a budget line is also named.
+  NOTE: Where steps 2 and 3 both apply (household comparator + programme comparator, no named budget line), score 3 is mandatory regardless of how compelling the affordability case appears.
 STEP 4: Does the proposal name a specific government budget line AND reference current spending on comparable functions?
   → YES: score 4 minimum. Continue to step 5.
   → NO: score 3. Stop.
