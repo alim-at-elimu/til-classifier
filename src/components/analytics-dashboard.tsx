@@ -380,19 +380,49 @@ export function AnalyticsDashboard() {
       {/* 1. Score Distribution */}
       <section>
         <h2 className="text-sm font-bold mb-3">Score Distribution</h2>
-        <div className="border border-gray-200 rounded p-4 max-w-md">
-          <div className="space-y-2">
-            {BANDS.map((band) => (
-              <Tooltip key={band} content={bandMembers[band].length > 0 ? <div>{bandMembers[band].map((n, i) => <div key={i}>{n}</div>)}</div> : <div>No proposals</div>}>
-                <div className="flex items-center gap-2 cursor-default">
-                  <div className="text-xs w-20">{band}</div>
-                  <div className="flex-1 bg-gray-100 rounded h-5 relative">
-                    <div className={`h-5 rounded ${BAND_COLORS[band]}`} style={{ width: `${(bandCounts[band] / maxBar) * 100}%` }} />
+        <div className="grid grid-cols-2 gap-6">
+          <div className="border border-gray-200 rounded p-4">
+            <div className="text-xs text-gray-500 mb-3">By recommendation band</div>
+            <div className="space-y-2">
+              {BANDS.map((band) => (
+                <Tooltip key={band} content={bandMembers[band].length > 0 ? <div>{bandMembers[band].map((n, i) => <div key={i}>{n}</div>)}</div> : <div>No proposals</div>}>
+                  <div className="flex items-center gap-2 cursor-default">
+                    <div className="text-xs w-20">{band}</div>
+                    <div className="flex-1 bg-gray-100 rounded h-5 relative">
+                      <div className={`h-5 rounded ${BAND_COLORS[band]}`} style={{ width: `${(bandCounts[band] / maxBar) * 100}%` }} />
+                    </div>
+                    <div className="text-xs font-medium w-6 text-right">{bandCounts[band]}</div>
                   </div>
-                  <div className="text-xs font-medium w-6 text-right">{bandCounts[band]}</div>
-                </div>
-              </Tooltip>
-            ))}
+                </Tooltip>
+              ))}
+            </div>
+          </div>
+          <div className="border border-gray-200 rounded p-4">
+            <div className="text-xs text-gray-500 mb-3">By theme</div>
+            <div className="space-y-3">
+              {[...new Set(filtered.map((d) => d.proposal.theme))].sort().map((theme) => {
+                const themeItems = filtered.filter((d) => d.proposal.theme === theme);
+                const themeBands: Record<string, number> = { Excellent: 0, Good: 0, Weak: 0, Fail: 0 };
+                themeItems.forEach((d) => { if (d.result.recommendation in themeBands) themeBands[d.result.recommendation]++; });
+                const total = themeItems.length;
+                return (
+                  <div key={theme}>
+                    <div className="text-xs font-medium text-gray-700 mb-1">{theme} ({total})</div>
+                    <div className="flex h-4 rounded overflow-hidden bg-gray-100">
+                      {BANDS.map((band) => {
+                        const pct = total > 0 ? (themeBands[band] / total) * 100 : 0;
+                        if (pct === 0) return null;
+                        return (
+                          <Tooltip key={band} content={<div>{band}: {themeBands[band]}</div>}>
+                            <div className={`h-4 ${BAND_COLORS[band]}`} style={{ width: `${pct}%` }} />
+                          </Tooltip>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </section>
