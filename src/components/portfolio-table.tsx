@@ -43,6 +43,7 @@ export interface ProposalRow {
   raw_total: number | null;
   recommendation: string | null;
   gates_passed: boolean | null;
+  lead_reviewer_id: string | null;
 }
 
 type SortKey = "org_name" | "country" | "theme" | "raw_total" | "recommendation" | "gates_passed";
@@ -56,6 +57,11 @@ const BAND_STYLE: Record<string, { bg: string; text: string }> = {
 };
 
 const BAND_ORDER: Record<string, number> = { Excellent: 4, Good: 3, Weak: 2, Fail: 1 };
+
+interface Panelist {
+  id: string;
+  name: string;
+}
 
 interface PortfolioTableProps {
   onSelectProposal: (id: string) => void;
@@ -219,27 +225,35 @@ function downloadHTML(html: string, filename: string) {
 
 export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: PortfolioTableProps) {
   const [proposals, setProposals] = useState<ProposalRow[]>([]);
+  const [panelists, setPanelists] = useState<Panelist[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("raw_total");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [unlockConfirm, setUnlockConfirm] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [assigning, setAssigning] = useState(false);
 
-  useEffect(() => { loadProposals(); }, []);
+  useEffect(() => { loadData(); }, []);
 
-  async function loadProposals() {
-    const { data } = await supabase
-      .from("proposals")
-      .select("id, org_name, country, theme, status, classifier_results(raw_total, recommendation, gates_passed)")
-      .in("status", ["scored", "in_review", "finalized"]);
+  async function loadData() {
+    const [propRes, panRes] = await Promise.all([
+      supabase
+        .from("proposals")
+        .select("id, org_name, country, theme, status, lead_reviewer_id, classifier_results(raw_total, recommendation, gates_passed)")
+        .in("status", ["scored", "in_review", "finalized"]),
+      supabase.from("panelists").select("id, name").order("name"),
+    ]);
 
-    if (data) {
-      const rows: ProposalRow[] = data.map((p: any) => {
+    if (panRes.data) setPanelists(panRes.data);
+
+    if (propRes.data) {
+      const rows: ProposalRow[] = propRes.data.map((p: any) => {
         const cr = Array.isArray(p.classifier_results) ? p.classifier_results[0] : p.classifier_results;
         return {
           id: p.id, org_name: p.org_name || "Unknown", country: p.country || "",
           theme: p.theme || "", status: p.status, raw_total: cr?.raw_total ?? null,
           recommendation: cr?.recommendation ?? null, gates_passed: cr?.gates_passed ?? null,
+          lead_reviewer_id: p.lead_reviewer_id,
         };
       });
       setProposals(rows);
@@ -267,6 +281,39 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
     return sortDir === "asc" ? cmp : -cmp;
   });
 
+  function isBorderline(score: number | null): boolean {
+    return score !== null && score >= 75 && score <= 84;
+  }
+
+  function getReviewerName(reviewerId: string | null): string | null {
+    if (!reviewerId) return null;
+    const p = panelists.find((pan) => pan.id === reviewerId);
+    return p?.name || null;
+  }
+
+  async function handleAssignReviewers() {
+    if (panelists.length === 0) return;
+    setAssigning(true);
+
+    const borderline = proposals.filter((p) => isBorderline(p.raw_total) && !p.lead_reviewer_id);
+    let idx = Math.floor(Math.random() * panelists.length);
+
+    for (const p of borderline) {
+      const assignee = panelists[idx % panelists.length];
+      idx++;
+
+      const { error } = await supabase
+        .from("proposals")
+        .update({ lead_reviewer_id: assignee.id })
+        .eq("id", p.id);
+
+      if (!error) {
+        setProposals((prev) => prev.map((pr) => pr.id === p.id ? { ...pr, lead_reviewer_id: assignee.id } : pr));
+      }
+    }
+    setAssigning(false);
+  }
+
   async function handleLock(proposalId: string) {
     await supabase.from("proposals").update({ status: "finalized" }).eq("id", proposalId);
     setProposals((prev) => prev.map((p) => (p.id === proposalId ? { ...p, status: "finalized" } : p)));
@@ -282,7 +329,6 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
     setExporting(true);
     try {
       const ids = proposals.map((p) => p.id);
-
       const [crRes, ovRes] = await Promise.all([
         supabase.from("classifier_results").select("proposal_id, call1_json, call2_json").in("proposal_id", ids),
         supabase.from("panel_overrides").select("proposal_id, sub_criterion_key, original_score, override_score, rationale, created_at, panelists(name)").in("proposal_id", ids).order("created_at", { ascending: true }),
@@ -299,22 +345,15 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
       for (const p of proposals) {
         const cr = resultMap.get(p.id);
         if (!cr) continue;
-        const call1 = cr.call1_json;
-        const call2 = cr.call2_json;
         const history = overrideMap.get(p.id) || [];
-
         const latestOverrides: Record<string, number> = {};
         for (const o of history) latestOverrides[o.sub_criterion_key] = o.override_score;
-
-        const totals = computeTotals(call1, call2, latestOverrides);
+        const totals = computeTotals(cr.call1_json, cr.call2_json, latestOverrides);
         const html = generateExportHTML(
           { org_name: p.org_name, country: p.country, theme: p.theme },
-          call1, call2, totals, latestOverrides, history
+          cr.call1_json, cr.call2_json, totals, latestOverrides, history
         );
-        const safeName = p.org_name.replace(/[^a-zA-Z0-9]/g, "_");
-        downloadHTML(html, `TIL_Assessment_${safeName}.html`);
-
-        // Small delay to avoid browser blocking multiple downloads
+        downloadHTML(html, `TIL_Assessment_${p.org_name.replace(/[^a-zA-Z0-9]/g, "_")}.html`);
         await new Promise((r) => setTimeout(r, 300));
       }
     } catch (err) {
@@ -338,22 +377,47 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
   if (loading) return <div className="text-sm text-gray-500">Loading proposals...</div>;
   if (proposals.length === 0) return <div className="text-sm text-gray-500">No scored proposals found. Run a batch first.</div>;
 
+  const borderlineCount = proposals.filter((p) => isBorderline(p.raw_total)).length;
+  const unassignedBorderline = proposals.filter((p) => isBorderline(p.raw_total) && !p.lead_reviewer_id).length;
+
   return (
     <div>
       {/* Top bar */}
       <div className="flex items-center justify-between mb-3">
-        <div className="text-xs text-gray-400">{proposals.length} proposal{proposals.length !== 1 ? "s" : ""}</div>
-        <button
-          onClick={handleExportAll}
-          disabled={exporting}
-          className="text-xs bg-black text-white rounded px-3 py-1.5 font-medium hover:bg-gray-800 disabled:opacity-50"
-        >
-          {exporting ? "Exporting..." : "Export All Reports"}
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="text-xs text-gray-400">{proposals.length} proposal{proposals.length !== 1 ? "s" : ""}</div>
+          {borderlineCount > 0 && (
+            <div className="text-xs text-orange-600">{borderlineCount} for review (75-84)</div>
+          )}
+          <div className="text-xs text-gray-300">|</div>
+          {[...new Set(proposals.map((p) => p.theme))].sort().map((t) => {
+            const short = t.match(/^Theme \d+/)?.[0] || t;
+            const desc = t.replace(/^Theme \d+\s*[—–-]\s*/, "");
+            return <div key={t} className="text-xs text-gray-400"><span className="text-gray-600 font-medium">{short}:</span> {desc}</div>;
+          })}
+        </div>
+      <div className="flex items-center gap-2">
+          {unassignedBorderline > 0 && (
+            <button
+              onClick={handleAssignReviewers}
+              disabled={assigning}
+              className="text-xs bg-orange-500 text-white rounded px-3 py-1.5 font-medium hover:bg-orange-600 disabled:opacity-50"
+            >
+              {assigning ? "Assigning..." : `Assign Reviewers (${unassignedBorderline})`}
+            </button>
+          )}
+          <button
+            onClick={handleExportAll}
+            disabled={exporting}
+            className="text-xs bg-black text-white rounded px-3 py-1.5 font-medium hover:bg-gray-800 disabled:opacity-50"
+          >
+            {exporting ? "Exporting..." : "Export All Reports"}
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded border border-gray-200">
-        <table className="w-full text-sm">
+         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
               <SortHeader label="Organisation" sortKeyName="org_name" />
@@ -362,6 +426,7 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
               <SortHeader label="Gates" sortKeyName="gates_passed" />
               <SortHeader label="Score" sortKeyName="raw_total" />
               <SortHeader label="Band" sortKeyName="recommendation" />
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Review</th>
               <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-16">Status</th>
             </tr>
           </thead>
@@ -369,6 +434,8 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
             {sorted.map((p) => {
               const band = BAND_STYLE[p.recommendation || ""] || { bg: "bg-gray-100", text: "text-gray-600" };
               const isLocked = p.status === "finalized";
+              const borderline = isBorderline(p.raw_total);
+              const reviewerName = getReviewerName(p.lead_reviewer_id);
               return (
                 <tr
                   key={p.id}
@@ -377,7 +444,7 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
                 >
                   <td className="px-3 py-2.5 font-medium">{p.org_name}</td>
                   <td className="px-3 py-2.5 text-gray-600">{p.country}</td>
-                  <td className="px-3 py-2.5 text-xs text-gray-600">{p.theme}</td>
+                  <td className="px-3 py-2.5 text-xs text-gray-600 whitespace-nowrap">{p.theme.match(/^Theme \d+/)?.[0] || p.theme}</td>
                   <td className="px-3 py-2.5">
                     {p.gates_passed === null ? "—" : p.gates_passed ? (
                       <span className="text-green-600 font-semibold text-xs">PASS</span>
@@ -390,6 +457,14 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
                     <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${band.bg} ${band.text}`}>
                       {p.recommendation || "—"}
                     </span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {borderline ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-orange-100 text-orange-700">Review</span>
+                        {reviewerName && <span className="text-xs text-gray-500">{reviewerName}</span>}
+                      </div>
+                    ) : null}
                   </td>
                   <td className="px-3 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                     {isLocked ? (

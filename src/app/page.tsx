@@ -85,8 +85,8 @@ export default function Home() {
   const readyCount = folders ? folders.filter((f) => f.proposalPdf).length : 0;
 
   return (
-    <main className="max-w-5xl mx-auto p-10 font-mono bg-white text-black min-h-screen">
-      <div className="flex items-center justify-between mb-6">
+    <main className="max-w-7xl mx-auto p-10 font-mono bg-white text-black min-h-screen">
+    <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">TIL RFP Classifier</h1>
         {currentPanelist && (
           <div className="flex items-center gap-2 text-sm">
