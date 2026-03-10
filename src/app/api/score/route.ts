@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
         type: "text",
         text: `Organisation: ${org || "(extract from document)"}\nCountry: ${country || "(extract from document)"}\nTheme: ${theme || "(extract from document)"}\n\n${costNote}\n\n${annexNoteText}\n\nEvaluate all three gates in sequence. If gates pass, score dimensions 1, 2, and 3. Score every sub-criterion independently. Output only valid JSON.`,
       },
-    ], 16000);
+    ], 20000);
 
     const call1 = safeParseJSON(call1Result.text);
     if (!call1) {
@@ -167,7 +167,7 @@ call1_scaled_partial: ${scaledPartial} (already scaled /60 — do not recompute)
         type: "text",
         text: `Organisation: ${extractedOrg}\nCountry: ${extractedCountry}\nTheme: ${extractedTheme}\n\n${partial}\n\n${costNote}\n\n${annexNoteText}\n\nScore dimensions 4 and 5 independently. Write consistency notes and produce the final recommendation. Output only valid JSON.`,
       },
-    ], 16000);
+    ], 20000);
 
     const call2 = safeParseJSON(call2Result.text);
     if (!call2) {

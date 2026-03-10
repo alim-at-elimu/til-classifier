@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useGoogleLogin } from "@react-oauth/google";
 import { useGoogleAuth } from "@/lib/google-auth";
 
@@ -9,12 +10,35 @@ export function GoogleSignIn() {
   const login = useGoogleLogin({
     onSuccess: (response) => {
       setAccessToken(response.access_token);
+      // store expiry — Google tokens last 1 hour, refresh at 50 minutes
+      const expiresAt = Date.now() + (response.expires_in ?? 3600) * 1000;
+      localStorage.setItem("google_token_expires_at", expiresAt.toString());
     },
     onError: () => {
       console.error("Google login failed");
     },
     scope: "https://www.googleapis.com/auth/drive.readonly",
+    prompt: "none", // silent re-auth when possible
   });
+
+  // auto-refresh: check every minute, re-login silently 10 minutes before expiry
+  useEffect(() => {
+    if (!accessToken) return;
+
+    const interval = setInterval(() => {
+      const expiresAt = localStorage.getItem("google_token_expires_at");
+      if (!expiresAt) return;
+
+      const minutesLeft = (parseInt(expiresAt) - Date.now()) / 1000 / 60;
+
+      if (minutesLeft < 10) {
+        // token is about to expire, refresh silently
+        login();
+      }
+    }, 60_000); // check every 60 seconds
+
+    return () => clearInterval(interval);
+  }, [accessToken, login]);
 
   if (accessToken) {
     return (
@@ -23,7 +47,10 @@ export function GoogleSignIn() {
           Google Drive connected
         </span>
         <button
-          onClick={() => setAccessToken(null)}
+          onClick={() => {
+            setAccessToken(null);
+            localStorage.removeItem("google_token_expires_at");
+          }}
           className="text-sm text-gray-500 underline"
         >
           Disconnect
