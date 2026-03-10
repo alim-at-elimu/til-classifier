@@ -170,7 +170,7 @@ function Tooltip({ children, content }: { children: React.ReactNode; content: Re
   }
 
   return (
-    <div className="relative inline-block" onMouseEnter={handleEnter} onMouseLeave={() => setShow(false)}>
+    <div className="relative w-full" onMouseEnter={handleEnter} onMouseLeave={() => setShow(false)}>
       {children}
       {show && (
         <div className="fixed z-50 pointer-events-none" style={{ left: pos.x, top: pos.y - 8, transform: "translate(-50%, -100%)" }}>
@@ -380,36 +380,19 @@ export function AnalyticsDashboard() {
       {/* 1. Score Distribution */}
       <section>
         <h2 className="text-sm font-bold mb-3">Score Distribution</h2>
-        <div className="grid grid-cols-2 gap-6">
-          <div className="border border-gray-200 rounded p-4">
-            <div className="text-xs text-gray-500 mb-3">Overall scores</div>
-            <div className="space-y-2">
-              {[...filtered].sort((a, b) => b.result.raw_total - a.result.raw_total).map((d) => (
-                <div key={d.proposal.id} className="flex items-center gap-2">
-                  <div className="text-xs w-28 truncate" title={d.proposal.org_name}>{d.proposal.org_name}</div>
+        <div className="border border-gray-200 rounded p-4 max-w-md">
+          <div className="space-y-2">
+            {BANDS.map((band) => (
+              <Tooltip key={band} content={bandMembers[band].length > 0 ? <div>{bandMembers[band].map((n, i) => <div key={i}>{n}</div>)}</div> : <div>No proposals</div>}>
+                <div className="flex items-center gap-2 cursor-default">
+                  <div className="text-xs w-20">{band}</div>
                   <div className="flex-1 bg-gray-100 rounded h-5 relative">
-                    <div className={`h-5 rounded ${BAND_COLORS[d.result.recommendation] || "bg-gray-400"}`} style={{ width: `${d.result.raw_total}%` }} />
-                    <span className="absolute right-2 top-0 text-xs leading-5 font-medium">{d.result.raw_total}</span>
+                    <div className={`h-5 rounded ${BAND_COLORS[band]}`} style={{ width: `${(bandCounts[band] / maxBar) * 100}%` }} />
                   </div>
+                  <div className="text-xs font-medium w-6 text-right">{bandCounts[band]}</div>
                 </div>
-              ))}
-            </div>
-          </div>
-          <div className="border border-gray-200 rounded p-4">
-            <div className="text-xs text-gray-500 mb-3">By recommendation band</div>
-            <div className="space-y-2">
-              {BANDS.map((band) => (
-                <Tooltip key={band} content={bandMembers[band].length > 0 ? <div>{bandMembers[band].map((n, i) => <div key={i}>{n}</div>)}</div> : <div>No proposals</div>}>
-                  <div className="flex items-center gap-2 cursor-default">
-                    <div className="text-xs w-20">{band}</div>
-                    <div className="flex-1 bg-gray-100 rounded h-5 relative">
-                      <div className={`h-5 rounded ${BAND_COLORS[band]}`} style={{ width: `${(bandCounts[band] / maxBar) * 100}%` }} />
-                    </div>
-                    <div className="text-xs font-medium w-6 text-right">{bandCounts[band]}</div>
-                  </div>
-                </Tooltip>
-              ))}
-            </div>
+              </Tooltip>
+            ))}
           </div>
         </div>
       </section>
@@ -430,7 +413,7 @@ export function AnalyticsDashboard() {
                     <div className="h-5 bg-green-600 rounded-l" style={{ width: `${pct}%` }} />
                   </div>
                   <div className="text-xs w-20 text-right">
-                    <span className="text-green-700">{pass}P</span>
+                    <span className="text-green-700">{pass}</span>
                     {fail > 0 && <span className="text-red-600 ml-1">{fail}F</span>}
                   </div>
                 </div>
