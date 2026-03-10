@@ -400,7 +400,7 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
                 </button>
                 {isExp && (
                   <div className="px-2.5 py-2 bg-white space-y-1 border-t border-gray-100">
-                    {gate.extract && <div className="text-xs"><span className="font-semibold text-gray-600">Evidence: </span><span className="italic text-gray-500">"{gate.extract}"</span></div>}
+                    {gate.extract && <div className="text-xs"><span className="font-semibold text-gray-600">Extract: </span><span className="italic text-gray-500">"{gate.extract}"</span></div>}
                     {gate.interpretation && <div className="text-xs"><span className="font-semibold text-gray-600">Interpretation: </span><span className="text-gray-500">{gate.interpretation}</span></div>}
                     {gate.rubric_anchor && <div className="text-xs bg-gray-50 rounded px-2 py-1 mt-0.5"><span className="font-semibold text-gray-600">Rubric ({gate.score}): </span><span className="text-gray-500">{gate.rubric_anchor}</span></div>}
                   </div>
@@ -475,15 +475,12 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
 
                       {isExp && data && (
                         <div className={`bg-slate-50 border-l-4 border-blue-400 px-3 py-2.5 space-y-2 ${isLast ? "border-b border-gray-100" : ""}`}>
-                          {data.extract && <div className="text-xs leading-relaxed"><span className="font-semibold text-gray-600">Evidence: </span><span className="italic text-gray-500">"{data.extract}"</span></div>}
+                          {data.extract && <div className="text-xs leading-relaxed"><span className="font-semibold text-gray-600">Extract: </span><span className="italic text-gray-500">"{data.extract}"</span></div>}
                           {data.interpretation && <div className="text-xs leading-relaxed"><span className="font-semibold text-gray-600">Interpretation: </span><span className="text-gray-500">{data.interpretation}</span></div>}
                           {data.rubric_anchor && (
                             <div className="rounded bg-white border border-gray-200 px-2.5 py-1.5">
-                              <div className="flex items-center gap-1.5 mb-0.5">
-                                <span className={`inline-flex items-center justify-center w-5 h-5 rounded text-xs font-bold ${SCORE_BG[aiScore]} ${SCORE_TEXT[aiScore]}`}>{aiScore}</span>
-                                <span className="text-xs font-semibold text-gray-600">Awarded rubric level</span>
-                              </div>
-                              <div className="text-xs text-gray-500 leading-relaxed ml-6">{data.rubric_anchor}</div>
+                              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Rubric level {aiScore}</div>
+                              <div className="text-xs text-gray-500 leading-relaxed">{data.rubric_anchor}</div>
                             </div>
                           )}
                           {hasBorderline && (

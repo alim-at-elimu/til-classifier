@@ -5,6 +5,7 @@ import {
   safeParseJSON,
   computeTotals,
   DIM_DEFS,
+  injectRubricAnchors,
 } from "@/lib/classifier-engine";
 
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
@@ -113,7 +114,7 @@ export async function POST(req: NextRequest) {
       },
       {
         type: "text",
-        text: `Organisation: ${org || "(extract from document)"}\nCountry: ${country || "(extract from document)"}\nTheme: ${theme || "(extract from document)"}\n\n${costNote}\n\n${annexNoteText}\n\nEvaluate all three gates in sequence. If gates pass, score dimensions 1, 2, and 3. Score every sub-criterion independently. Before finalizing any score of 4, re-read the SCORING DECISION RULES for that sub-criterion and verify that no rule explicitly awards 5 for the evidence present. The decision rules override the general conservative default. Output only valid JSON.`,
+        text: `Organisation: ${org || "(extract from document)"}\nCountry: ${country || "(extract from document)"}\nTheme: ${theme || "(extract from document)"}\n\n${costNote}\n\n${annexNoteText}\n\nEvaluate all three gates in sequence. If gates pass, score dimensions 1, 2, and 3. Score every sub-criterion independently. Output only valid JSON.`,
       },
     ], 16000);
 
@@ -164,7 +165,7 @@ call1_scaled_partial: ${scaledPartial} (already scaled /60 — do not recompute)
       },
       {
         type: "text",
-        text: `Organisation: ${extractedOrg}\nCountry: ${extractedCountry}\nTheme: ${extractedTheme}\n\n${partial}\n\n${costNote}\n\n${annexNoteText}\n\nScore dimensions 4 and 5 independently. Before finalizing any score of 4, re-read the SCORING DECISION RULES for that sub-criterion and verify that no rule explicitly awards 5 for the evidence present. The decision rules override the general conservative default. Write consistency notes and produce the final recommendation. Output only valid JSON.`,
+        text: `Organisation: ${extractedOrg}\nCountry: ${extractedCountry}\nTheme: ${extractedTheme}\n\n${partial}\n\n${costNote}\n\n${annexNoteText}\n\nScore dimensions 4 and 5 independently. Write consistency notes and produce the final recommendation. Output only valid JSON.`,
       },
     ], 16000);
 
@@ -179,6 +180,9 @@ call1_scaled_partial: ${scaledPartial} (already scaled /60 — do not recompute)
         { status: 500 }
       );
     }
+
+    // Inject verbatim rubric anchors
+    injectRubricAnchors(call1, call2);
 
     // Compute totals
     const totals = computeTotals(call1, call2);

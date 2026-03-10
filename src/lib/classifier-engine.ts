@@ -1,5 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// TIL RFP Classifier Engine v3.4 — extracted for batch pipeline
+// TIL RFP Classifier Engine v3.4.1 — calibration patch applied
+// Changes from v3.4:
+//   1. learning_outcome_evidence_chain: carve-out for government data systems
+//   2. cost_ownership_trajectory: panel flag when digital cost ceiling fires
+//   3. steady_state_fiscal: panel flags when "will explore" or household
+//      spending rules fire
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -335,11 +340,11 @@ MANDATORY CONSERVATIVE SCORING RULES — apply to every score
 const EVIDENCE_FORMAT = `══════════════════════════════════════════════════════════════
 EVIDENCE FORMAT — required for every gate and sub-criterion
 ══════════════════════════════════════════════════════════════
-- "extract": verbatim quote (max 50 words) that most directly justifies the score. Use quotation marks. Write "No evidence found." if absent.
+- "extract": verbatim quote (max 150 words) that most directly justifies the score. Copy the exact words from the proposal. Use quotation marks. Write "No evidence found." if absent.
 - "interpretation": 1 sentence (2 max if genuinely complex) stating why the extract justifies the score. Write in plain English for a non-technical reviewer. Never reference internal field names.
 - "rubric_anchor": copy the COMPLETE indicator text from the rubric for the score level awarded.
 - "borderline": null if unambiguous. If genuinely borderline, one sentence naming the tension. Also populate "borderline_rubric_low" and "borderline_rubric_high".
-- "panel_verify": null unless Case A annex rule applies.`;
+- "panel_verify": null unless Case A annex rule applies OR a panel flag rule below instructs otherwise. Where a panel flag fires, panel_verify must be populated with the specified "P:" string. Do NOT set panel_verify to null when a panel flag instruction applies.`;
 
 const GATE_RULES = `══════════════════════════════════════════════════════════════
 HARD GATES — evaluate in sequence, flag failures
@@ -387,16 +392,20 @@ HARD RULE: The non-digital exception above does not apply to proposals where the
 IF digital/EdTech AND TEST 1 passed BUT TEST 2 failed (platform proprietary, vendor required for maintenance/updates) → apply the proprietary platform rule above. Score 4 if dependency is explicitly acknowledged as an ongoing requirement and the maintaining entity is named with no claim that government can replace the vendor or operate independently. Score 3 if the proposal claims the dependency is resolved through competitive replaceability, open standards, or vendor-neutral architecture when the core application remains proprietary. Claiming that government can switch vendors is not equivalent to acknowledging the dependency. Competitive replaceability is a resolution claim, not an acknowledgment. The test: does the proposal say "this entity will maintain the platform and government cannot do it alone" (score 4) or does the proposal say "government is not dependent because it can switch vendors" (score 3)?
 IF "subsequent funding / will need resources / could continue" language present → score 3 maximum regardless of other factors.
 HARD RULE — UNSPECIFIED DESIGN: This rule applies only to dimension scoring. It does not affect gate evaluation (country_theme_fit, scale_duration_compliance, public_system_embedding). Gates must be evaluated solely against their own rubric criteria. Where a proposal explicitly states that the pilot design, tools, or approach will be determined by a future workshop, recommendations process, or prior phase whose outcomes are not yet known, the following three sub-criteria are capped at score 3: capacity_shift, cost_ownership_trajectory, steady_state_fiscal. You cannot assess the fiscal or operational sustainability of a design that has not yet been specified. Trigger phrases include: "based on the recommendations from this workshop", "will support the implementation of those recommendations", "it is expected that this work will result in recommendations", "ideally we would begin", or any construction that makes the pilot design contingent on a future decision not yet made. This rule does not apply where a proposal has a fully specified design and separately references a review or validation workshop.
+CALIBRATION EXAMPLE — UNSPECIFIED DESIGN IN PRACTICE: A proposal where the pilot design is explicitly contingent on a future workshop (e.g. "based on the recommendations from this workshop, this grant will support the implementation of those recommendations") scores 3 maximum on transition_logic, capacity_shift, adoption_timeline, cost_ownership_trajectory, and steady_state_fiscal. Conditional language in the pilot design ("ideally we would begin", "with subsequent funding", "could continue") reinforces this cap. Do not award 4 on any of these five sub-criteria where the unspecified design rule is triggered, regardless of how well the proposal describes its ongoing work or government partnership.
 
 ── cost_ownership_trajectory ──
 IF the highest-cost at-scale item is a technology subscription, platform service, or recurring digital cost AND the proposal does not name a confirmed government budget line or procurement mechanism for that cost → score 3 maximum. Language such as "procured as a service through standard government mechanisms" or "will be funded through county budgets" without naming the specific budget line, allocation, or procurement authority is directional but not confirmed. This rule applies even if non-digital delivery costs are well covered by existing government systems.
+PANEL FLAG: When this rule fires, set panel_verify to: "P: Score capped at 3 — recurring digital service cost not confirmed against a named budget line or procurement authority. Panel to probe: what specific budget line or procurement mechanism covers this cost at scale? Has a commitment been secured since submission?" Do not set panel_verify to null in this case.
 
 ── steady_state_fiscal ──
 IF proposal names specific government budget lines AND references current spending on comparable functions → score 4 minimum.
 IF proposal makes generic absorption argument (costs will absorb into existing training/supervision budgets) WITHOUT referencing the budget envelope or current spending levels → score 3 maximum. Naming government budget categories (e.g., "existing professional development budgets," "operational budgets," "routine supervision costs") without referencing current spending levels, per-unit costs at scale, or the size of the budget envelope is a generic absorption argument and scores 3 maximum.
 IF highest-cost at-scale item (AI inference, platform subscription, technology licensing) uses "will explore / one possible option / may be needed" → score 3 maximum. This rule applies even if all non-digital costs are well covered.
+PANEL FLAG: When this rule fires, set panel_verify to: "P: Score capped at 3 — highest-cost digital item uses exploratory language on funding mechanism. Panel to probe: has a funding commitment been confirmed since submission? What is the current cost estimate per user at scale, and which government body would carry it?" Do not set panel_verify to null in this case.
 IMPORTANT: Referencing what government currently spends on a different programme as a cost comparator (e.g., "our solution costs 29% of what the county pays for Programme X") is not the same as identifying a budget line for this intervention. Comparators demonstrate affordability but do not constitute a funding mechanism. Score 4 requires that the proposal identifies where in the government budget this cost will sit, not merely that government could afford it relative to other spending.
-HARD RULE: Consumer or household spending patterns (e.g. "parents already spend X on paper materials") are not equivalent to a named government budget line. Where the fiscal sustainability argument relies on replacing parent or household expenditure rather than referencing a specific government budget allocation, spending envelope, or confirmed procurement line, the score is 3 maximum.`;
+HARD RULE: Consumer or household spending patterns (e.g. "parents already spend X on paper materials") are not equivalent to a named government budget line. Where the fiscal sustainability argument relies on replacing parent or household expenditure rather than referencing a specific government budget allocation, spending envelope, or confirmed procurement line, the score is 3 maximum.
+PANEL FLAG: When the household spending rule fires, set panel_verify to: "P: Score capped at 3 — fiscal sustainability argument rests on replacing household or parent expenditure rather than a named government budget line. Panel to probe: is there a confirmed government procurement line or budget allocation covering this cost independently of household spending?" Do not set panel_verify to null in this case.`;
 
 const CALIBRATION_ADDITIONS_CALL2 = `══════════════════════════════════════════════════════════════
 SCORING DECISION RULES — CALL 2
@@ -419,6 +428,8 @@ IF proposal specifies intermediate indicators, data sources, and collection freq
 IF implementation monitoring plan is thin or intermediate indicators are poorly specified → score 3.
 HARD CEILING: Score 4 requires that the implementation monitoring plan is specific to this pilot: named indicators, named data sources, named collection frequency. A monitoring framework that is explicitly contingent on a future workshop outcome or recommendations process is not a specified monitoring plan — score 3 maximum.
 
+CALIBRATION NOTE — EVIDENCE STRENGTH FOR DATA-USE PROPOSALS: A proposal that lists operational indicators (upload frequency, meeting attendance, spot checks) without specifying outcome indicators, instruments, sample sizes, or validation approaches scores 3 maximum on decision_useful_evidence. A proposal whose monitoring framework is contingent on a future workshop scores 3 maximum. Score 4 requires named indicators, named data sources, and named collection frequency specific to this pilot.
+
 ── government_decision_mechanisms ──
 Score on whether a named government body is positioned to make an adoption decision based on pilot evidence. A well-designed pilot alone is not sufficient, but a pilot that is explicitly designed to answer the adoption questions combined with a government body mandated to act on those answers constitutes a decision mechanism.
 
@@ -434,7 +445,9 @@ Hard rule: HARD CEILING FOR WEAK MECHANISMS: Where the only named government str
 IF stated hypothesis ends at improved teaching practice AND does not address how practice change translates to student learning → score 2. General references to "improved learning" elsewhere in the narrative do not rescue a hypothesis that stops at teacher practice.
 IF causal chain explicitly includes the teacher-practice-to-student-learning link, even if asserted rather than operationalised → score 3 minimum.
 Score 4 requires that the pilot measurement design explicitly captures BOTH teacher practice AND student learning with named instruments or specified measures for each. If the pilot measures teaching practice with specified instruments but defers student learning measurement entirely to TIL's external evaluation without specifying its own learning outcome measures, the score is 3. The chain from practice to learning is asserted, not designed for.
+CARVE-OUT FOR GOVERNMENT DATA SYSTEMS: Where a proposal satisfies ALL THREE conditions — (a) specifies a named comparison design with arms, an explicit counterfactual, and allocation logic; AND (b) names a government-operated data system that routinely captures learner outcome data as part of its existing function (e.g., a national mobile school reporting platform, standardised national assessment system); AND (c) explicitly states the pilot will use that system to analyse the relationship between the intervention and learner outcomes — score 4 is available. The requirement for a standalone pilot-specific learning assessment instrument is waived where the government system itself constitutes the measurement design for the distal outcome. This carve-out does not apply where the learner data system is described only as a future integration, where the proposal does not name the specific system, or where the learner data is incidental rather than integrated into the pilot analysis plan.
 HARD CEILING: Where the stated hypothesis ends at improved instructional practice and the word "learning" or "outcomes" appears only in general narrative elsewhere but NOT in the causal hypothesis itself, the score is 2. This ceiling is not lifted by external evidence citations or general learning ambitions stated elsewhere in the proposal.
+PANEL FLAG: When the score is 3 because (a) the hypothesis ends at teacher practice, or (b) student learning measurement is deferred entirely to TIL's external evaluation without the proposal naming its own learning outcome measures or invoking the government data system carve-out above, set panel_verify to: "P: Score reflects hypothesis boundary or deferred learning measurement. Panel to probe: does the applicant's government data system capture learner outcome data the pilot can draw on? Is a student learning instrument planned alongside TIL's external evaluation?" Do not set panel_verify to null in this case.
 
 ── team_timeline_realism ──
 IF staffing plan names individuals with LOE AND timeline is phased with milestones AND dependencies are mapped → score 4.
@@ -632,4 +645,31 @@ export function computeTotals(call1: any, call2: any): {
   else if (total >= 75) rec = "Good";
   else if (total >= 60) rec = "Weak";
   return { dims, total, rec, gatesPassed: call1.all_gates_passed ?? true };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RUBRIC ANCHOR INJECTION — overwrites model-generated rubric_anchor with
+// verbatim rubric text looked up by awarded score. Call after parsing both
+// call1 and call2 JSON, before storing to Supabase.
+// ─────────────────────────────────────────────────────────────────────────────
+export function injectRubricAnchors(call1: any, call2: any): void {
+  // Gates
+  for (const gate of RUBRIC.gates) {
+    const g = call1?.gates?.[gate.id];
+    if (g && g.score >= 1 && g.score <= 5) {
+      g.rubric_anchor = gate.anchors[g.score as 1|2|3|4|5].text;
+    }
+  }
+  // Dimensions
+  for (const dim of RUBRIC.dimensions) {
+    const src = dim.call === 1 ? call1?.dimensions : call2?.dimensions;
+    const dimData = src?.[dim.id];
+    if (!dimData) continue;
+    for (const sub of dim.sub) {
+      const s = dimData[sub.id];
+      if (s && s.score >= 1 && s.score <= 5) {
+        s.rubric_anchor = sub.anchors[s.score as 1|2|3|4|5].text;
+      }
+    }
+  }
 }

@@ -21,8 +21,13 @@ export function BatchProgressDashboard({ progress }: BatchProgressProps) {
 
   return (
     <div className="mt-6">
-      <h2 className="text-lg font-bold mb-3">Batch Scoring</h2>
-
+      <div className="flex items-center gap-3 mb-3">
+  <h2 className="text-lg font-bold">Batch Scoring</h2>
+  {progress.runLabel && (
+    <span className="text-sm font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{progress.runLabel}</span>
+  )}
+</div>
+      
       {/* Progress bar */}
       <div className="mb-4">
         <div className="flex justify-between text-sm mb-1">

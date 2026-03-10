@@ -7,8 +7,10 @@ export interface BatchProgress {
   completed: number;
   currentOrg: string;
   currentStep: string;
+  runlabel?: string;
   errors: { org: string; error: string }[];
   scored: { org: string; total: number; rec: string }[];
+  runlabel?: string;
 }
 
 export type ProgressCallback = (progress: BatchProgress) => void;
