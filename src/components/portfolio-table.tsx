@@ -44,6 +44,7 @@ export interface ProposalRow {
   recommendation: string | null;
   gates_passed: boolean | null;
   lead_reviewer_id: string | null;
+  finalized_by: string | null;
 }
 
 type SortKey = "org_name" | "country" | "theme" | "raw_total" | "recommendation" | "gates_passed";
@@ -239,7 +240,7 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
     const [propRes, panRes] = await Promise.all([
       supabase
         .from("proposals")
-        .select("id, org_name, country, theme, status, lead_reviewer_id, classifier_results(raw_total, recommendation, gates_passed)")
+        .select("id, org_name, country, theme, status, lead_reviewer_id, finalized_by, classifier_results(raw_total, recommendation, gates_passed)")
         .in("status", ["scored", "in_review", "finalized"]),
       supabase.from("panelists").select("id, name").order("name"),
     ]);
@@ -254,6 +255,7 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
           theme: p.theme || "", status: p.status, raw_total: cr?.raw_total ?? null,
           recommendation: cr?.recommendation ?? null, gates_passed: cr?.gates_passed ?? null,
           lead_reviewer_id: p.lead_reviewer_id,
+          finalized_by: p.finalized_by,
         };
       });
       setProposals(rows);
@@ -315,13 +317,14 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
   }
 
   async function handleLock(proposalId: string) {
-    await supabase.from("proposals").update({ status: "finalized" }).eq("id", proposalId);
-    setProposals((prev) => prev.map((p) => (p.id === proposalId ? { ...p, status: "finalized" } : p)));
+    if (!panelistId) { alert("Select your name first."); return; }
+    await supabase.from("proposals").update({ status: "finalized", finalized_by: panelistId }).eq("id", proposalId);
+    setProposals((prev) => prev.map((p) => (p.id === proposalId ? { ...p, status: "finalized", finalized_by: panelistId } : p)));
   }
 
   async function handleUnlock(proposalId: string) {
-    await supabase.from("proposals").update({ status: "scored" }).eq("id", proposalId);
-    setProposals((prev) => prev.map((p) => (p.id === proposalId ? { ...p, status: "scored" } : p)));
+    await supabase.from("proposals").update({ status: "scored", finalized_by: null }).eq("id", proposalId);
+    setProposals((prev) => prev.map((p) => (p.id === proposalId ? { ...p, status: "scored", finalized_by: null } : p)));
     setUnlockConfirm(null);
   }
 
@@ -468,9 +471,12 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
                   </td>
                   <td className="px-3 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                     {isLocked ? (
-                      <button onClick={() => setUnlockConfirm(p.id)} className="text-xs text-gray-400 hover:text-black" title="Locked">🔒</button>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <span className="text-xs text-green-700 font-medium">Reviewed{getReviewerName(p.finalized_by) ? ` by ${getReviewerName(p.finalized_by)}` : ""}</span>
+                        <button onClick={() => setUnlockConfirm(p.id)} className="text-xs text-gray-400 hover:text-black" title="Unlock">🔓</button>
+                      </div>
                     ) : (
-                      <button onClick={() => handleLock(p.id)} className="text-xs text-gray-300 hover:text-black" title="Click to lock">🔓</button>
+                      <button onClick={() => handleLock(p.id)} className="text-xs text-gray-300 hover:text-black" title="Click to review">☐</button>
                     )}
                   </td>
                 </tr>
