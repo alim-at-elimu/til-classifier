@@ -9,7 +9,7 @@ import {
 } from "@/lib/classifier-engine";
 
 // Allow up to 10 minutes for Opus scoring (2 calls × large PDF)
-export const maxDuration = 600;
+export const maxDuration = 300;
 
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 const MAX_RETRIES = 3;
