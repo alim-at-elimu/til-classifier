@@ -18,7 +18,7 @@ export type ProgressCallback = (progress: BatchProgress) => void;
 export async function runBatch(
   batchId: string,
   folders: InnovatorFolder[],
-  accessToken: string,
+  getAccessToken: () => string,
   onProgress: ProgressCallback
 ): Promise<void> {
   const progress: BatchProgress = {
@@ -38,15 +38,17 @@ export async function runBatch(
 
   const { data: existingProposals } = await supabase
     .from("proposals")
-    .select("id, gdrive_folder_id")
+    .select("id, gdrive_folder_id, status")
     .eq("batch_id", batchId);
 
   const scoredFolderIds = new Set<string>();
+  const existingProposalMap = new Map<string, { id: string; status: string }>();
   if (existingResults && existingProposals) {
     const scoredProposalIds = new Set(
       existingResults.map((r) => r.proposal_id)
     );
     for (const p of existingProposals) {
+      existingProposalMap.set(p.gdrive_folder_id, { id: p.id, status: (p as any).status || "" });
       if (scoredProposalIds.has(p.id)) {
         scoredFolderIds.add(p.gdrive_folder_id);
       }
@@ -79,32 +81,44 @@ export async function runBatch(
     progress.currentOrg = folder.folderName;
 
     try {
-      // Insert proposal row
+      // Insert or reuse proposal row
       progress.currentStep = "Creating proposal record...";
       onProgress({ ...progress });
 
-      const { data: proposal, error: proposalErr } = await supabase
-        .from("proposals")
-        .insert({
-          org_name: folder.folderName,
-          gdrive_folder_id: folder.folderId,
-          proposal_file_id: folder.proposalPdf.id,
-          budget_file_id: folder.budgetXlsx?.id || null,
-          annex_file_ids: folder.annexes.map((a) => a.id),
-          status: "scoring",
-          batch_id: batchId,
-        })
-        .select("id")
-        .single();
+      let proposalId: string;
+      const existing = existingProposalMap.get(folder.folderId);
+      if (existing && (existing.status === "error" || existing.status === "scoring")) {
+        // Resume: reuse existing errored/stalled proposal row
+        proposalId = existing.id;
+        await supabase
+          .from("proposals")
+          .update({ status: "scoring" })
+          .eq("id", proposalId);
+      } else {
+        const { data: proposal, error: proposalErr } = await supabase
+          .from("proposals")
+          .insert({
+            org_name: folder.folderName,
+            gdrive_folder_id: folder.folderId,
+            proposal_file_id: folder.proposalPdf.id,
+            budget_file_id: folder.budgetXlsx?.id || null,
+            annex_file_ids: folder.annexes.map((a) => a.id),
+            status: "scoring",
+            batch_id: batchId,
+          })
+          .select("id")
+          .single();
 
-      if (proposalErr) throw new Error(`Supabase insert: ${proposalErr.message}`);
+        if (proposalErr || !proposal) throw new Error(`Supabase insert: ${proposalErr?.message || "no data"}`);
+        proposalId = proposal.id;
+      }
 
       // Download PDF
       progress.currentStep = "Downloading proposal PDF...";
       onProgress({ ...progress });
       const pdfBase64 = await downloadPdfAsBase64(
         folder.proposalPdf.id,
-        accessToken
+        getAccessToken()
       );
 
       // Extract cost context if XLSX exists
@@ -114,7 +128,7 @@ export async function runBatch(
         onProgress({ ...progress });
         costContext = await extractCostContext(
           folder.budgetXlsx.id,
-          accessToken
+          getAccessToken()
         );
       }
 
@@ -127,23 +141,46 @@ export async function runBatch(
       progress.currentStep = "Scoring (Call 1 + Call 2)...";
       onProgress({ ...progress });
 
-      const scoreRes = await fetch("/api/score", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pdfBase64,
-          costContext,
-          annexNote,
-          org: "",
-          country: "",
-          theme: "",
-        }),
-      });
+      let scoreData: any;
+      const MAX_RETRIES = 2;
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        const scoreRes = await fetch("/api/score", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pdfBase64,
+            costContext,
+            annexNote,
+            org: "",
+            country: "",
+            theme: "",
+          }),
+        });
 
-      const scoreData = await scoreRes.json();
+        try {
+          scoreData = await scoreRes.json();
+        } catch (parseErr) {
+          // JSON parse failed — likely rate-limited or overloaded
+          if (attempt < MAX_RETRIES) {
+            progress.currentStep = `Scoring failed (attempt ${attempt + 1}), retrying in 30s...`;
+            onProgress({ ...progress });
+            await new Promise((r) => setTimeout(r, 30_000));
+            continue;
+          }
+          throw new Error(`Score API returned non-JSON after ${MAX_RETRIES + 1} attempts`);
+        }
 
-      if (!scoreRes.ok || scoreData.error) {
-        throw new Error(scoreData.error || `Score API ${scoreRes.status}`);
+        if (!scoreRes.ok || scoreData.error) {
+          if (attempt < MAX_RETRIES && scoreRes.status >= 500) {
+            progress.currentStep = `Score API error ${scoreRes.status} (attempt ${attempt + 1}), retrying in 30s...`;
+            onProgress({ ...progress });
+            await new Promise((r) => setTimeout(r, 30_000));
+            continue;
+          }
+          throw new Error(scoreData.error || `Score API ${scoreRes.status}`);
+        }
+
+        break; // success
       }
 
       // Write results to Supabase
@@ -153,7 +190,7 @@ export async function runBatch(
       const { error: resultErr } = await supabase
         .from("classifier_results")
         .insert({
-          proposal_id: proposal.id,
+          proposal_id: proposalId,
           batch_id: batchId,
           call1_json: scoreData.call1,
           call2_json: scoreData.call2,
@@ -173,7 +210,7 @@ export async function runBatch(
           country: scoreData.call1?.applicant?.country || "",
           theme: [scoreData.call1?.applicant?.theme].flat().filter(Boolean),
         })
-        .eq("id", proposal.id);
+        .eq("id", proposalId);
 
       progress.scored.push({
         org: scoreData.call1?.applicant?.name || folder.folderName,

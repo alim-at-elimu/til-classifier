@@ -35,8 +35,12 @@ export default function Home() {
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
   const [batchName, setBatchName] = useState("Wave 1 March 2026");
   const [runCount, setRunCount] = useState(1);
+  const [resumableBatches, setResumableBatches] = useState<{ id: string; name: string; total: number; scored: number; errored: number }[]>([]);
+  const [selectedResumeBatchId, setSelectedResumeBatchId] = useState<string | null>(null);
   const { accessToken } = useGoogleAuth();
   const runningRef = useRef(false);
+  const tokenRef = useRef(accessToken);
+  tokenRef.current = accessToken; // always keep ref in sync with latest token
 
   useEffect(() => {
     async function init() {
@@ -46,9 +50,39 @@ export default function Home() {
 
       const { data } = await supabase.from("panelists").select("id, name").order("name");
       if (data) setPanelists(data);
+
+      await loadResumableBatches();
     }
     init();
   }, []);
+
+  async function loadResumableBatches() {
+    // Find batches that have proposals not yet scored
+    const { data: batches } = await supabase
+      .from("batches")
+      .select("id, name")
+      .order("created_at", { ascending: false });
+
+    if (!batches) return;
+
+    const resumable: typeof resumableBatches = [];
+    for (const b of batches) {
+      const { data: proposals } = await supabase
+        .from("proposals")
+        .select("id, status")
+        .eq("batch_id", b.id);
+
+      if (!proposals || proposals.length === 0) continue;
+
+      const scored = proposals.filter((p) => p.status === "scored" || p.status === "in_review" || p.status === "finalized").length;
+      const errored = proposals.filter((p) => p.status === "error" || p.status === "scoring").length;
+
+      if (errored > 0) {
+        resumable.push({ id: b.id, name: b.name, total: proposals.length, scored, errored });
+      }
+    }
+    setResumableBatches(resumable);
+  }
 
   useEffect(() => {
     if (activeTab === "review" && !currentPanelist) {
@@ -76,7 +110,7 @@ export default function Home() {
           .single();
 
         if (batchErr || !batch) throw new Error(batchErr?.message || "Failed to create batch");
-        await runBatch(batch.id, folders, accessToken, (progress) => {
+        await runBatch(batch.id, folders, () => tokenRef.current!, (progress) => {
           setBatchProgress({ ...progress, runLabel: runCount > 1 ? `Run ${run} of ${runCount}` : undefined });
         });
       }
@@ -85,6 +119,24 @@ export default function Home() {
     } finally {
       runningRef.current = false;
       setBatchRunning(false);
+    }
+  }
+
+  async function handleResumeBatch() {
+    if (!accessToken || !folders || !selectedResumeBatchId || runningRef.current) return;
+    runningRef.current = true;
+    setBatchRunning(true);
+
+    try {
+      await runBatch(selectedResumeBatchId, folders, () => tokenRef.current!, (progress) => {
+        setBatchProgress({ ...progress });
+      });
+    } catch (err: any) {
+      console.error("Resume batch error:", err);
+    } finally {
+      runningRef.current = false;
+      setBatchRunning(false);
+      loadResumableBatches(); // refresh the list
     }
   }
 
@@ -183,6 +235,37 @@ export default function Home() {
                 )}
               </div>
             </>
+          )}
+          {/* Resume existing batch */}
+          {folders && !batchRunning && !batchProgress && resumableBatches.length > 0 && (
+            <div className="mt-4 p-4 bg-amber-50 rounded border border-amber-200">
+              <label className="block text-sm font-medium mb-2 text-amber-800">Resume Incomplete Batch</label>
+              <p className="text-xs text-amber-600 mb-3">
+                These batches have proposals that errored or didn't finish scoring. Select one to re-run only the incomplete proposals.
+              </p>
+              <select
+                value={selectedResumeBatchId || ""}
+                onChange={(e) => setSelectedResumeBatchId(e.target.value || null)}
+                className="rounded border border-amber-300 px-3 py-2 text-sm mb-3 w-full max-w-lg bg-white"
+              >
+                <option value="">Select a batch to resume...</option>
+                {resumableBatches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} — {b.scored}/{b.total} scored, {b.errored} to retry
+                  </option>
+                ))}
+              </select>
+              {selectedResumeBatchId && (
+                <div>
+                  <button
+                    onClick={handleResumeBatch}
+                    className="rounded bg-amber-600 px-6 py-2 text-sm font-medium text-white hover:bg-amber-700"
+                  >
+                    Resume Batch ({resumableBatches.find((b) => b.id === selectedResumeBatchId)?.errored ?? 0} proposals to retry)
+                  </button>
+                </div>
+              )}
+            </div>
           )}
           {batchProgress && <BatchProgressDashboard progress={batchProgress} />}
         </>
