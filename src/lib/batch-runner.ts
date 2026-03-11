@@ -10,10 +10,17 @@ export interface BatchProgress {
   runLabel?: string;
   errors: { org: string; error: string }[];
   scored: { org: string; total: number; rec: string }[];
-  
+
 }
 
 export type ProgressCallback = (progress: BatchProgress) => void;
+
+interface PreDownloaded {
+  folder: InnovatorFolder;
+  pdfBase64: string;
+  costContext: string;
+  annexNote: string;
+}
 
 export async function runBatch(
   batchId: string,
@@ -55,29 +62,62 @@ export async function runBatch(
     }
   }
 
-  for (const folder of folders) {
+  // ──────────────────────────────────────────────
+  // PHASE 1: Pre-download all files while token is fresh
+  // ──────────────────────────────────────────────
+  const toScore: PreDownloaded[] = [];
+  const skipIndices: number[] = [];
+
+  for (let i = 0; i < folders.length; i++) {
+    const folder = folders[i];
+
     if (!folder.proposalPdf) {
-      progress.errors.push({
-        org: folder.folderName,
-        error: "No proposal PDF detected",
-      });
+      progress.errors.push({ org: folder.folderName, error: "No proposal PDF detected" });
       progress.completed++;
       onProgress({ ...progress });
       continue;
     }
 
-    // Skip already scored
     if (scoredFolderIds.has(folder.folderId)) {
       progress.completed++;
-      progress.scored.push({
-        org: folder.folderName,
-        total: 0,
-        rec: "Previously scored",
-      });
+      progress.scored.push({ org: folder.folderName, total: 0, rec: "Previously scored" });
       onProgress({ ...progress });
       continue;
     }
 
+    progress.currentOrg = folder.folderName;
+    progress.currentStep = `Downloading files (${toScore.length + 1} of ~${folders.length - progress.completed - scoredFolderIds.size})...`;
+    onProgress({ ...progress });
+
+    try {
+      const pdfBase64 = await downloadPdfAsBase64(folder.proposalPdf.id, getAccessToken);
+
+      let costContext = "";
+      if (folder.budgetXlsx) {
+        costContext = await extractCostContext(folder.budgetXlsx.id, getAccessToken);
+      }
+
+      const annexNote =
+        folder.annexes.length > 0
+          ? `ANNEX FILES SUBMITTED (content NOT included — apply conservative scoring for annex-reliant sub-criteria): ${folder.annexes.map((f) => f.name).join(", ")}`
+          : "No annex files were submitted separately.";
+
+      toScore.push({ folder, pdfBase64, costContext, annexNote });
+    } catch (err: any) {
+      progress.errors.push({ org: folder.folderName, error: err.message || "Download failed" });
+      progress.completed++;
+      onProgress({ ...progress });
+    }
+  }
+
+  progress.currentStep = `Downloads complete. Scoring ${toScore.length} proposals...`;
+  onProgress({ ...progress });
+
+  // ──────────────────────────────────────────────
+  // PHASE 2: Score all downloaded proposals (no GDrive needed)
+  // ──────────────────────────────────────────────
+  for (const item of toScore) {
+    const { folder, pdfBase64, costContext, annexNote } = item;
     progress.currentOrg = folder.folderName;
 
     try {
@@ -106,7 +146,7 @@ export async function runBatch(
           .insert({
             org_name: folder.folderName,
             gdrive_folder_id: folder.folderId,
-            proposal_file_id: folder.proposalPdf.id,
+            proposal_file_id: folder.proposalPdf!.id,
             budget_file_id: folder.budgetXlsx?.id || null,
             annex_file_ids: folder.annexes.map((a) => a.id),
             status: "scoring",
@@ -118,30 +158,6 @@ export async function runBatch(
         if (proposalErr || !proposal) throw new Error(`Supabase insert: ${proposalErr?.message || "no data"}`);
         proposalId = proposal.id;
       }
-
-      // Download PDF
-      progress.currentStep = "Downloading proposal PDF...";
-      onProgress({ ...progress });
-      const pdfBase64 = await downloadPdfAsBase64(
-        folder.proposalPdf.id,
-        getAccessToken
-      );
-
-      // Extract cost context if XLSX exists
-      let costContext = "";
-      if (folder.budgetXlsx) {
-        progress.currentStep = "Extracting cost template...";
-        onProgress({ ...progress });
-        costContext = await extractCostContext(
-          folder.budgetXlsx.id,
-          getAccessToken
-        );
-      }
-
-      const annexNote =
-        folder.annexes.length > 0
-          ? `ANNEX FILES SUBMITTED (content NOT included — apply conservative scoring for annex-reliant sub-criteria): ${folder.annexes.map((f) => f.name).join(", ")}`
-          : "No annex files were submitted separately.";
 
       // Call scoring API route
       progress.currentStep = "Scoring (Call 1 + Call 2)...";
@@ -169,7 +185,7 @@ export async function runBatch(
           // JSON parse failed — likely rate-limited or overloaded
           if (attempt < MAX_RETRIES) {
             const waitSec = 30 * (attempt + 1); // 30s, 60s, 90s, 120s, 150s
-            progress.currentStep = `Scoring failed (attempt ${attempt + 1}/${MAX_RETRIES}), retrying in ${waitSec}s...`;
+            progress.currentStep = `Scoring failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${waitSec}s...`;
             onProgress({ ...progress });
             await new Promise((r) => setTimeout(r, waitSec * 1000));
             continue;
@@ -180,7 +196,7 @@ export async function runBatch(
         if (!scoreRes.ok || scoreData.error) {
           if (attempt < MAX_RETRIES && scoreRes.status >= 500) {
             const waitSec = 30 * (attempt + 1);
-            progress.currentStep = `Score API error ${scoreRes.status} (attempt ${attempt + 1}/${MAX_RETRIES}), retrying in ${waitSec}s...`;
+            progress.currentStep = `Score API error ${scoreRes.status} (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${waitSec}s...`;
             onProgress({ ...progress });
             await new Promise((r) => setTimeout(r, waitSec * 1000));
             continue;
