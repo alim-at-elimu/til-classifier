@@ -160,7 +160,8 @@ export async function runBatch(
       }
 
       // Call scoring API route
-      progress.currentStep = "Scoring (Call 1 + Call 2)...";
+      const pdfSizeMB = (pdfBase64.length / 1024 / 1024).toFixed(1);
+      progress.currentStep = `Scoring (Call 1 + Call 2) — PDF ${pdfSizeMB}MB base64...`;
       onProgress({ ...progress });
 
       let scoreData: any;
@@ -179,18 +180,21 @@ export async function runBatch(
           }),
         });
 
+        const rawText = await scoreRes.text();
         try {
-          scoreData = await scoreRes.json();
+          scoreData = JSON.parse(rawText);
         } catch (parseErr) {
-          // JSON parse failed — likely rate-limited or overloaded
+          // Capture what we actually got back for debugging
+          const preview = rawText.slice(0, 200);
+          const sizeKB = Math.round(rawText.length / 1024);
           if (attempt < MAX_RETRIES) {
             const waitSec = 30 * (attempt + 1); // 30s, 60s, 90s, 120s, 150s
-            progress.currentStep = `Scoring failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${waitSec}s...`;
+            progress.currentStep = `Scoring failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${scoreRes.status} "${preview.slice(0, 60)}..." (${sizeKB}KB). Retrying in ${waitSec}s...`;
             onProgress({ ...progress });
             await new Promise((r) => setTimeout(r, waitSec * 1000));
             continue;
           }
-          throw new Error(`Score API returned non-JSON after ${MAX_RETRIES + 1} attempts`);
+          throw new Error(`Score API non-JSON after ${MAX_RETRIES + 1} tries. Status: ${scoreRes.status}, body(${sizeKB}KB): ${preview}`);
         }
 
         if (!scoreRes.ok || scoreData.error) {
