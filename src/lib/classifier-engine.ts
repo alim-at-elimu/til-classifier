@@ -681,7 +681,7 @@ This rule does not apply where a proposal has a fully specified design and separ
 const SUB_SCHEMA = `{ "score": 0, "extract": "", "interpretation": "", "rubric_anchor": "", "borderline": null, "borderline_rubric_low": null, "borderline_rubric_high": null, "panel_verify": null }`;
 
 const CALL1_JSON_SCHEMA = `{
-  "applicant": { "name": "", "country": "", "theme": "" },
+  "applicant": { "name": "", "country": "", "theme": [] },
   "gates": {
     "country_theme_fit": { "score": 0, "pass": true, "extract": "", "interpretation": "", "rubric_anchor": "" },
     "scale_duration_compliance": { "score": 0, "pass": true, "extract": "", "interpretation": "", "rubric_anchor": "" },
@@ -738,7 +738,12 @@ export const SYSTEM_PROMPT_CALL1 = [
 METADATA EXTRACTION — populate the applicant object before scoring:
 - name: lead organisation name as stated in the proposal
 - country: one of: Ghana, Nigeria, Tanzania, Kenya, Ethiopia, South Africa, Mozambique, Cote d'Ivoire, Senegal
-- theme: one of: Theme 1 — Structured Pedagogy, Theme 2 — Teacher Coaching and Mentoring, Theme 3 — EdTech-Enabled Learning, Theme 4 — Assessment for Learning
+- theme: a JSON array of one or more matching themes. The ONLY valid values are exactly:
+  "Theme 1 — Structured Pedagogy"
+  "Theme 2 — Teacher Coaching and Mentoring"
+  "Theme 3 — EdTech-Enabled Learning"
+  "Theme 4 — Assessment for Learning"
+  If the proposal clearly fits multiple themes, include all matching themes in the array. Do not concatenate, abbreviate, or invent categories. Example: ["Theme 1 — Structured Pedagogy", "Theme 3 — EdTech-Enabled Learning"]
 If pre-filled in the user message, use those values. Never leave these fields empty.`,
   CONSERVATIVE_RULES,
   EVIDENCE_FORMAT,

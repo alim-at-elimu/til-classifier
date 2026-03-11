@@ -60,6 +60,13 @@ const GATE_LABELS: Record<string, string> = {
   public_system_embedding: "Public System Embedding",
 };
 
+const CANONICAL_THEMES = [
+  "Theme 1 — Structured Pedagogy",
+  "Theme 2 — Teacher Coaching and Mentoring",
+  "Theme 3 — EdTech-Enabled Learning",
+  "Theme 4 — Assessment for Learning",
+] as const;
+
 const BANDS = ["Excellent", "Good", "Weak", "Fail"] as const;
 const BAND_COLORS: Record<string, string> = {
   Excellent: "bg-green-600",
@@ -69,7 +76,7 @@ const BAND_COLORS: Record<string, string> = {
 };
 
 // ── Types ──
-interface ProposalRow { id: string; org_name: string; country: string; theme: string; }
+interface ProposalRow { id: string; org_name: string; country: string; theme: string | string[]; }
 interface ResultRow { proposal_id: string; call1_json: any; call2_json: any; gates_passed: boolean; raw_total: number; recommendation: string; }
 interface OverrideRow { proposal_id: string; sub_criterion_key: string; original_score: number; override_score: number; created_at: string; }
 interface Enriched { proposal: ProposalRow; result: ResultRow; }
@@ -232,10 +239,13 @@ export function AnalyticsDashboard() {
 
   // ── Filters ──
   const countries = [...new Set(data.map((d) => d.proposal.country))].sort();
-  const themes = [...new Set(data.map((d) => d.proposal.theme))].sort();
+  const themes = [...new Set(data.flatMap((d) => Array.isArray(d.proposal.theme) ? d.proposal.theme : [d.proposal.theme]))].filter((t) => (CANONICAL_THEMES as readonly string[]).includes(t)).sort();
   const filtered = data.filter((d) => {
     if (filterCountry !== "all" && d.proposal.country !== filterCountry) return false;
-    if (filterTheme !== "all" && d.proposal.theme !== filterTheme) return false;
+    if (filterTheme !== "all") {
+      const pThemes = Array.isArray(d.proposal.theme) ? d.proposal.theme : [d.proposal.theme];
+      if (!pThemes.includes(filterTheme)) return false;
+    }
     return true;
   });
 
@@ -374,7 +384,10 @@ export function AnalyticsDashboard() {
           <option value="all">All themes</option>
           {themes.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        <div className="text-xs text-gray-400">{filtered.length} proposal{filtered.length !== 1 ? "s" : ""}</div>
+        <div className="text-xs text-gray-400">
+          {filtered.length} proposal{filtered.length !== 1 ? "s" : ""}
+          {(() => { const multi = filtered.filter((d) => Array.isArray(d.proposal.theme) && d.proposal.theme.length > 1).length; return multi > 0 ? ` (${multi} multi-theme)` : ""; })()}
+        </div>
       </div>
 
       {/* 1. Score Distribution */}
@@ -397,32 +410,47 @@ export function AnalyticsDashboard() {
               ))}
             </div>
           </div>
-          <div className="border border-gray-200 rounded p-4">
-            <div className="text-xs text-gray-500 mb-3">By theme</div>
-            <div className="space-y-3">
-              {[...new Set(filtered.map((d) => d.proposal.theme))].sort().map((theme) => {
-                const themeItems = filtered.filter((d) => d.proposal.theme === theme);
-                const themeBands: Record<string, number> = { Excellent: 0, Good: 0, Weak: 0, Fail: 0 };
-                themeItems.forEach((d) => { if (d.result.recommendation in themeBands) themeBands[d.result.recommendation]++; });
-                const total = themeItems.length;
-                return (
-                  <div key={theme}>
-                    <div className="text-xs font-medium text-gray-700 mb-1">{theme} ({total})</div>
-                    <div className="flex h-4 rounded overflow-hidden bg-gray-100">
-                      {BANDS.map((band) => {
-                        const pct = total > 0 ? (themeBands[band] / total) * 100 : 0;
-                        if (pct === 0) return null;
-                        return (
-                          <Tooltip key={band} content={<div>{band}: {themeBands[band]}</div>}>
-                            <div className={`h-4 ${BAND_COLORS[band]}`} style={{ width: `${pct}%` }} />
-                          </Tooltip>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+          <div className="border border-gray-200 rounded overflow-hidden">
+            <div className="text-xs text-gray-500 px-4 pt-3 pb-2">By theme</div>
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="text-left px-4 py-2 font-medium text-gray-600">Theme</th>
+                  {BANDS.map((band) => (
+                    <th key={band} className="text-center px-3 py-2 font-medium text-gray-600 w-20">{band}</th>
+                  ))}
+                  <th className="text-center px-3 py-2 font-medium text-gray-600 w-16">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {CANONICAL_THEMES.map((theme) => {
+                  const themeItems = filtered.filter((d) => (Array.isArray(d.proposal.theme) ? d.proposal.theme : [d.proposal.theme]).includes(theme));
+                  if (themeItems.length === 0) return null;
+                  const themeBands: Record<string, number> = { Excellent: 0, Good: 0, Weak: 0, Fail: 0 };
+                  themeItems.forEach((d) => { if (d.result.recommendation in themeBands) themeBands[d.result.recommendation]++; });
+                  const bandTextColor: Record<string, string> = { Excellent: "text-green-700", Good: "text-blue-700", Weak: "text-yellow-700", Fail: "text-red-700" };
+                  const bandBgColor: Record<string, string> = { Excellent: "bg-green-50", Good: "bg-blue-50", Weak: "bg-yellow-50", Fail: "bg-red-50" };
+                  return (
+                    <tr key={theme} className="border-t border-gray-100">
+                      <td className="px-4 py-2 font-medium text-gray-700">{theme}</td>
+                      {BANDS.map((band) => (
+                        <td key={band} className="text-center px-3 py-2">
+                          {themeBands[band] > 0 ? (
+                            <span className={`inline-block px-2 py-0.5 rounded font-semibold ${bandBgColor[band]} ${bandTextColor[band]}`}>{themeBands[band]}</span>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          )}
+                        </td>
+                      ))}
+                      <td className="text-center px-3 py-2 font-bold text-gray-700">{themeItems.length}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {filtered.some((d) => Array.isArray(d.proposal.theme) && d.proposal.theme.length > 1) && (
+              <div className="text-xs text-gray-400 px-4 py-2 italic">* Proposals with multiple themes are counted under each theme.</div>
+            )}
           </div>
         </div>
       </section>

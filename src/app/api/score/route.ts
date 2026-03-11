@@ -15,7 +15,7 @@ async function callClaude(
   system: string,
   content: any[],
   maxTok: number = 16000,
-  model: string = "claude-sonnet-4-20250514"
+  model: string = "claude-opus-4-20250514"
 ): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
   let data: any;
 
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { pdfBase64, costContext, annexNote, org, country, theme, model } = body;
-    const selectedModel = model || "claude-sonnet-4-20250514";
+    const selectedModel = model || "claude-opus-4-20250514";
 
     if (!pdfBase64) {
       return NextResponse.json(
@@ -134,7 +134,8 @@ export async function POST(req: NextRequest) {
     // ── Build Call 2 context exactly as the artifact does ──
     const extractedOrg = call1.applicant?.name || org || "(extract from document)";
     const extractedCountry = call1.applicant?.country || country || "(extract from document)";
-    const extractedTheme = call1.applicant?.theme || theme || "(extract from document)";
+    const rawTheme = call1.applicant?.theme;
+    const extractedTheme = Array.isArray(rawTheme) ? rawTheme.join(", ") : (rawTheme || theme || "(extract from document)");
 
     const d1 = call1.dimensions;
 

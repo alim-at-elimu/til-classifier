@@ -38,7 +38,7 @@ export interface ProposalRow {
   id: string;
   org_name: string;
   country: string;
-  theme: string;
+  theme: string[];
   status: string;
   raw_total: number | null;
   recommendation: string | null;
@@ -59,15 +59,44 @@ const BAND_STYLE: Record<string, { bg: string; text: string }> = {
 
 const BAND_ORDER: Record<string, number> = { Excellent: 4, Good: 3, Weak: 2, Fail: 1 };
 
+const CANONICAL_THEMES = [
+  "Theme 1 — Structured Pedagogy",
+  "Theme 2 — Teacher Coaching and Mentoring",
+  "Theme 3 — EdTech-Enabled Learning",
+  "Theme 4 — Assessment for Learning",
+] as const;
+
+const THEME_SHORT: Record<string, string> = {
+  "Theme 1 — Structured Pedagogy": "T1",
+  "Theme 2 — Teacher Coaching and Mentoring": "T2",
+  "Theme 3 — EdTech-Enabled Learning": "T3",
+  "Theme 4 — Assessment for Learning": "T4",
+};
+
+const THEME_COLORS: Record<string, { bg: string; text: string; ring: string }> = {
+  "Theme 1 — Structured Pedagogy": { bg: "bg-indigo-50", text: "text-indigo-700", ring: "ring-indigo-200" },
+  "Theme 2 — Teacher Coaching and Mentoring": { bg: "bg-teal-50", text: "text-teal-700", ring: "ring-teal-200" },
+  "Theme 3 — EdTech-Enabled Learning": { bg: "bg-violet-50", text: "text-violet-700", ring: "ring-violet-200" },
+  "Theme 4 — Assessment for Learning": { bg: "bg-rose-50", text: "text-rose-700", ring: "ring-rose-200" },
+};
+
 interface Panelist {
   id: string;
   name: string;
+}
+
+interface BatchOption {
+  id: string;
+  name: string;
+  created_at: string;
 }
 
 interface PortfolioTableProps {
   onSelectProposal: (id: string) => void;
   panelistId: string | null;
   panelistName: string | null;
+  batchId: string | null;
+  onBatchChange: (batchId: string | null) => void;
 }
 
 // ── Export helpers ──
@@ -191,7 +220,7 @@ function generateExportHTML(proposal: any, call1: any, call2: any, totals: any, 
   <div class="header">
     <div>
       <div style="font-size:18px;font-weight:800">${proposal.org_name}</div>
-      <div style="font-size:11px;color:#6b7280;margin-top:2px">${proposal.country} · ${proposal.theme}</div>
+      <div style="font-size:11px;color:#6b7280;margin-top:2px">${proposal.country} · ${Array.isArray(proposal.theme) ? proposal.theme.join(", ") : proposal.theme}</div>
     </div>
     <div style="display:flex;align-items:center;gap:10px">
       <div style="text-align:right"><div style="font-size:28px;font-weight:900;line-height:1">${totals.total}</div><div style="font-size:9px;color:#9ca3af">/100</div></div>
@@ -224,24 +253,51 @@ function downloadHTML(html: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: PortfolioTableProps) {
+export function PortfolioTable({ onSelectProposal, panelistId, panelistName, batchId, onBatchChange }: PortfolioTableProps) {
   const [proposals, setProposals] = useState<ProposalRow[]>([]);
   const [panelists, setPanelists] = useState<Panelist[]>([]);
+  const [batches, setBatches] = useState<BatchOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("raw_total");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [unlockConfirm, setUnlockConfirm] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [assigning, setAssigning] = useState(false);
+  const [filterTheme, setFilterTheme] = useState<string | null>(null);
 
-  useEffect(() => { loadData(); }, []);
+  // Load batches on mount
+  useEffect(() => {
+    async function loadBatches() {
+      const { data } = await supabase
+        .from("batches")
+        .select("id, name, created_at")
+        .order("created_at", { ascending: false });
+      if (data) {
+        setBatches(data);
+        // Auto-select the most recent batch if none selected
+        if (!batchId && data.length > 0) {
+          onBatchChange(data[0].id);
+        }
+      }
+    }
+    loadBatches();
+  }, []);
+
+  // Reload proposals when batchId changes
+  useEffect(() => { if (batchId) loadData(); }, [batchId]);
 
   async function loadData() {
+    let query = supabase
+      .from("proposals")
+      .select("id, org_name, country, theme, status, lead_reviewer_id, finalized_by, classifier_results(raw_total, recommendation, gates_passed)")
+      .in("status", ["scored", "in_review", "finalized"]);
+
+    if (batchId) {
+      query = query.eq("batch_id", batchId);
+    }
+
     const [propRes, panRes] = await Promise.all([
-      supabase
-        .from("proposals")
-        .select("id, org_name, country, theme, status, lead_reviewer_id, finalized_by, classifier_results(raw_total, recommendation, gates_passed)")
-        .in("status", ["scored", "in_review", "finalized"]),
+      query,
       supabase.from("panelists").select("id, name").order("name"),
     ]);
 
@@ -252,7 +308,7 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
         const cr = Array.isArray(p.classifier_results) ? p.classifier_results[0] : p.classifier_results;
         return {
           id: p.id, org_name: p.org_name || "Unknown", country: p.country || "",
-          theme: p.theme || "", status: p.status, raw_total: cr?.raw_total ?? null,
+          theme: Array.isArray(p.theme) ? p.theme : (p.theme ? [p.theme] : []), status: p.status, raw_total: cr?.raw_total ?? null,
           recommendation: cr?.recommendation ?? null, gates_passed: cr?.gates_passed ?? null,
           lead_reviewer_id: p.lead_reviewer_id,
           finalized_by: p.finalized_by,
@@ -271,8 +327,10 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
   const sorted = [...proposals].sort((a, b) => {
     let cmp = 0;
     switch (sortKey) {
-      case "org_name": case "country": case "theme":
+      case "org_name": case "country":
         cmp = (a[sortKey] || "").localeCompare(b[sortKey] || ""); break;
+      case "theme":
+        cmp = a.theme.join(", ").localeCompare(b.theme.join(", ")); break;
       case "raw_total":
         cmp = (a.raw_total ?? 0) - (b.raw_total ?? 0); break;
       case "recommendation":
@@ -282,6 +340,8 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
     }
     return sortDir === "asc" ? cmp : -cmp;
   });
+
+  const displayed = filterTheme ? sorted.filter((p) => p.theme.includes(filterTheme)) : sorted;
 
   function isBorderline(score: number | null): boolean {
     return score !== null && score >= 75 && score <= 84;
@@ -385,21 +445,56 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
 
   return (
     <div>
+      {/* Batch selector */}
+      <div className="flex items-center gap-3 mb-4">
+        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Batch</label>
+        <select
+          value={batchId || ""}
+          onChange={(e) => onBatchChange(e.target.value || null)}
+          className="rounded border border-gray-300 px-3 py-1.5 text-sm bg-white min-w-[300px]"
+        >
+          {batches.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name} ({new Date(b.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })})
+            </option>
+          ))}
+        </select>
+        <span className="text-xs text-gray-400">{batches.length} batch{batches.length !== 1 ? "es" : ""}</span>
+      </div>
+
       {/* Top bar */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
-          <div className="text-xs text-gray-400">{proposals.length} proposal{proposals.length !== 1 ? "s" : ""}</div>
+          <div className="text-xs text-gray-400">{displayed.length} of {proposals.length} proposal{proposals.length !== 1 ? "s" : ""}</div>
           {borderlineCount > 0 && (
             <div className="text-xs text-orange-600">{borderlineCount} for review (75-84)</div>
           )}
           <div className="text-xs text-gray-300">|</div>
-          {[...new Set(proposals.map((p) => p.theme))].sort().map((t) => {
-            const short = t.match(/^Theme \d+/)?.[0] || t;
-            const desc = t.replace(/^Theme \d+\s*[—–-]\s*/, "");
-            return <div key={t} className="text-xs text-gray-400"><span className="text-gray-600 font-medium">{short}:</span> {desc}</div>;
+          {/* Theme filter tabs */}
+          <button
+            onClick={() => setFilterTheme(null)}
+            className={`text-xs px-2 py-1 rounded-full font-medium transition-colors ${!filterTheme ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
+          >
+            All
+          </button>
+          {CANONICAL_THEMES.map((t) => {
+            const count = proposals.filter((p) => p.theme.includes(t)).length;
+            if (count === 0) return null;
+            const colors = THEME_COLORS[t];
+            const isActive = filterTheme === t;
+            return (
+              <button
+                key={t}
+                onClick={() => setFilterTheme(isActive ? null : t)}
+                title={t}
+                className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${isActive ? `${colors.bg} ${colors.text} ring-1 ${colors.ring}` : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
+              >
+                {THEME_SHORT[t]} <span className="text-[10px] opacity-70">{count}</span>
+              </button>
+            );
           })}
         </div>
-      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
           {unassignedBorderline > 0 && (
             <button
               onClick={handleAssignReviewers}
@@ -434,7 +529,7 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {sorted.map((p) => {
+            {displayed.map((p) => {
               const band = BAND_STYLE[p.recommendation || ""] || { bg: "bg-gray-100", text: "text-gray-600" };
               const isLocked = p.status === "finalized";
               const borderline = isBorderline(p.raw_total);
@@ -447,7 +542,19 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName }: P
                 >
                   <td className="px-3 py-2.5 font-medium">{p.org_name}</td>
                   <td className="px-3 py-2.5 text-gray-600">{p.country}</td>
-                  <td className="px-3 py-2.5 text-xs text-gray-600 whitespace-nowrap">{p.theme.match(/^Theme \d+/)?.[0] || p.theme}</td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex gap-1">
+                      {p.theme.map((t) => {
+                        const colors = THEME_COLORS[t];
+                        const short = THEME_SHORT[t] || t.match(/^Theme \d+/)?.[0] || t;
+                        return colors ? (
+                          <span key={t} className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${colors.bg} ${colors.text} cursor-default`} title={t}>{short}</span>
+                        ) : (
+                          <span key={t} className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-500 cursor-default" title={t}>{short}</span>
+                        );
+                      })}
+                    </div>
+                  </td>
                   <td className="px-3 py-2.5">
                     {p.gates_passed === null ? "—" : p.gates_passed ? (
                       <span className="text-green-600 font-semibold text-xs">PASS</span>
