@@ -124,21 +124,7 @@ export async function runBatch(
           : "No annex files were submitted separately.";
 
       // Call scoring API route
-      const OPUS_PROPOSALS = [
-        "Uthabiti",
-        "Mavis Computel",
-        "Sabre",
-        "Dignitas",
-        "Eval Pros",
-        "Edumalin",
-      ];
-      const useOpus = OPUS_PROPOSALS.some((name) =>
-        folder.folderName.toLowerCase().includes(name.toLowerCase())
-      );
-
-      progress.currentStep = useOpus
-        ? "Scoring (Call 1 + Call 2) [Opus]..."
-        : "Scoring (Call 1 + Call 2)...";
+      progress.currentStep = "Scoring (Call 1 + Call 2)...";
       onProgress({ ...progress });
 
       const scoreRes = await fetch("/api/score", {
@@ -151,7 +137,6 @@ export async function runBatch(
           org: "",
           country: "",
           theme: "",
-          ...(useOpus && { model: "claude-opus-4-5-20251001" }),
         }),
       });
 
@@ -186,7 +171,7 @@ export async function runBatch(
           status: "scored",
           org_name: scoreData.call1?.applicant?.name || folder.folderName,
           country: scoreData.call1?.applicant?.country || "",
-          theme: scoreData.call1?.applicant?.theme || "",
+          theme: [scoreData.call1?.applicant?.theme].flat().filter(Boolean),
         })
         .eq("id", proposal.id);
 

@@ -178,7 +178,7 @@ function generateExportHTML(proposal: any, call1: any, call2: any, totals: any, 
   <div class="header">
     <div>
       <div style="font-size:18px;font-weight:800">${proposal.org_name}</div>
-      <div style="font-size:11px;color:#6b7280;margin-top:2px">${proposal.country} · ${proposal.theme}</div>
+      <div style="font-size:11px;color:#6b7280;margin-top:2px">${proposal.country} · ${Array.isArray(proposal.theme) ? proposal.theme.join(", ") : proposal.theme}</div>
     </div>
     <div style="display:flex;align-items:center;gap:10px">
       <div style="text-align:right"><div style="font-size:28px;font-weight:900;line-height:1">${totals.total}</div><div style="font-size:9px;color:#9ca3af">/100</div></div>
@@ -337,7 +337,7 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
         <div className="flex items-start justify-between">
           <div>
             <h2 className="text-lg font-bold leading-tight">{proposal.org_name}</h2>
-            <div className="text-xs text-gray-500 mt-0.5">{proposal.country} · {proposal.theme}</div>
+            <div className="text-xs text-gray-500 mt-0.5">{proposal.country} · {Array.isArray(proposal.theme) ? proposal.theme.join(", ") : proposal.theme}</div>
             {isLocked && <span className="inline-block mt-1 text-xs font-semibold bg-gray-200 text-gray-600 rounded px-1.5 py-0.5">🔒 Locked</span>}
           </div>
           <div className="flex items-center gap-3">

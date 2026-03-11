@@ -24,6 +24,7 @@ interface Panelist {
 export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("batch");
   const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [currentPanelist, setCurrentPanelist] = useState<Panelist | null>(null);
   const [showPanelistModal, setShowPanelistModal] = useState(false);
   const [panelists, setPanelists] = useState<Panelist[]>([]);
@@ -193,6 +194,8 @@ export default function Home() {
           onSelectProposal={(id) => setSelectedProposalId(id)}
           panelistId={currentPanelist?.id || null}
           panelistName={currentPanelist?.name || null}
+          batchId={selectedBatchId}
+          onBatchChange={setSelectedBatchId}
         />
       )}
 
