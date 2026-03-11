@@ -14,7 +14,8 @@ const MAX_RETRIES = 3;
 async function callClaude(
   system: string,
   content: any[],
-  maxTok: number = 16000
+  maxTok: number = 16000,
+  model: string = "claude-sonnet-4-20250514"
 ): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
   let data: any;
 
@@ -27,7 +28,7 @@ async function callClaude(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model,
         max_tokens: maxTok,
         system,
         messages: [{ role: "user", content }],
@@ -78,7 +79,8 @@ async function callClaude(
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { pdfBase64, costContext, annexNote, org, country, theme } = body;
+    const { pdfBase64, costContext, annexNote, org, country, theme, model } = body;
+    const selectedModel = model || "claude-sonnet-4-20250514";
 
     if (!pdfBase64) {
       return NextResponse.json(
@@ -116,7 +118,7 @@ export async function POST(req: NextRequest) {
         type: "text",
         text: `Organisation: ${org || "(extract from document)"}\nCountry: ${country || "(extract from document)"}\nTheme: ${theme || "(extract from document)"}\n\n${costNote}\n\n${annexNoteText}\n\nEvaluate all three gates in sequence. If gates pass, score dimensions 1, 2, and 3. Score every sub-criterion independently. Output only valid JSON.`,
       },
-    ], 20000);
+    ], 20000, selectedModel);
 
     const call1 = safeParseJSON(call1Result.text);
     if (!call1) {
@@ -167,7 +169,7 @@ call1_scaled_partial: ${scaledPartial} (already scaled /60 — do not recompute)
         type: "text",
         text: `Organisation: ${extractedOrg}\nCountry: ${extractedCountry}\nTheme: ${extractedTheme}\n\n${partial}\n\n${costNote}\n\n${annexNoteText}\n\nScore dimensions 4 and 5 independently. Write consistency notes and produce the final recommendation. Output only valid JSON.`,
       },
-    ], 20000);
+    ], 20000, selectedModel);
 
     const call2 = safeParseJSON(call2Result.text);
     if (!call2) {
