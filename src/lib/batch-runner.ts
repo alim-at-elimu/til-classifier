@@ -118,7 +118,7 @@ export async function runBatch(
       onProgress({ ...progress });
       const pdfBase64 = await downloadPdfAsBase64(
         folder.proposalPdf.id,
-        getAccessToken()
+        getAccessToken
       );
 
       // Extract cost context if XLSX exists
@@ -128,7 +128,7 @@ export async function runBatch(
         onProgress({ ...progress });
         costContext = await extractCostContext(
           folder.budgetXlsx.id,
-          getAccessToken()
+          getAccessToken
         );
       }
 
