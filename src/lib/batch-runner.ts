@@ -90,6 +90,12 @@ export async function runBatch(
       if (existing && (existing.status === "error" || existing.status === "scoring")) {
         // Resume: reuse existing errored/stalled proposal row
         proposalId = existing.id;
+        // Delete any stale classifier_results so re-insert won't hit unique constraint
+        await supabase
+          .from("classifier_results")
+          .delete()
+          .eq("proposal_id", proposalId)
+          .eq("batch_id", batchId);
         await supabase
           .from("proposals")
           .update({ status: "scoring" })
@@ -142,7 +148,7 @@ export async function runBatch(
       onProgress({ ...progress });
 
       let scoreData: any;
-      const MAX_RETRIES = 3;
+      const MAX_RETRIES = 5;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         const scoreRes = await fetch("/api/score", {
           method: "POST",
@@ -162,9 +168,10 @@ export async function runBatch(
         } catch (parseErr) {
           // JSON parse failed — likely rate-limited or overloaded
           if (attempt < MAX_RETRIES) {
-            progress.currentStep = `Scoring failed (attempt ${attempt + 1}), retrying in 30s...`;
+            const waitSec = 30 * (attempt + 1); // 30s, 60s, 90s, 120s, 150s
+            progress.currentStep = `Scoring failed (attempt ${attempt + 1}/${MAX_RETRIES}), retrying in ${waitSec}s...`;
             onProgress({ ...progress });
-            await new Promise((r) => setTimeout(r, 30_000));
+            await new Promise((r) => setTimeout(r, waitSec * 1000));
             continue;
           }
           throw new Error(`Score API returned non-JSON after ${MAX_RETRIES + 1} attempts`);
@@ -172,9 +179,10 @@ export async function runBatch(
 
         if (!scoreRes.ok || scoreData.error) {
           if (attempt < MAX_RETRIES && scoreRes.status >= 500) {
-            progress.currentStep = `Score API error ${scoreRes.status} (attempt ${attempt + 1}), retrying in 30s...`;
+            const waitSec = 30 * (attempt + 1);
+            progress.currentStep = `Score API error ${scoreRes.status} (attempt ${attempt + 1}/${MAX_RETRIES}), retrying in ${waitSec}s...`;
             onProgress({ ...progress });
-            await new Promise((r) => setTimeout(r, 30_000));
+            await new Promise((r) => setTimeout(r, waitSec * 1000));
             continue;
           }
           throw new Error(scoreData.error || `Score API ${scoreRes.status}`);
