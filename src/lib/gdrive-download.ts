@@ -4,12 +4,19 @@ const DRIVE_API = "https://www.googleapis.com/drive/v3";
 
 export async function downloadFileAsArrayBuffer(
   fileId: string,
-  accessToken: string
+  accessToken: string | (() => string),
+  retryCount = 0
 ): Promise<ArrayBuffer> {
+  const token = typeof accessToken === "function" ? accessToken() : accessToken;
   const res = await fetch(
     `${DRIVE_API}/files/${fileId}?alt=media`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
+    { headers: { Authorization: `Bearer ${token}` } }
   );
+  if (res.status === 401 && retryCount < 2) {
+    // Token expired — wait a moment for background refresh, then retry with fresh token
+    await new Promise((r) => setTimeout(r, 3000));
+    return downloadFileAsArrayBuffer(fileId, accessToken, retryCount + 1);
+  }
   if (!res.ok) {
     throw new Error(`GDrive download failed: ${res.status} ${res.statusText}`);
   }
@@ -18,7 +25,7 @@ export async function downloadFileAsArrayBuffer(
 
 export async function downloadPdfAsBase64(
   fileId: string,
-  accessToken: string
+  accessToken: string | (() => string)
 ): Promise<string> {
   const buf = await downloadFileAsArrayBuffer(fileId, accessToken);
   const bytes = new Uint8Array(buf);
@@ -31,7 +38,7 @@ export async function downloadPdfAsBase64(
 
 export async function extractCostContext(
   fileId: string,
-  accessToken: string
+  accessToken: string | (() => string)
 ): Promise<string> {
   try {
     const buf = await downloadFileAsArrayBuffer(fileId, accessToken);

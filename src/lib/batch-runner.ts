@@ -118,7 +118,7 @@ export async function runBatch(
       onProgress({ ...progress });
       const pdfBase64 = await downloadPdfAsBase64(
         folder.proposalPdf.id,
-        getAccessToken()
+        getAccessToken
       );
 
       // Extract cost context if XLSX exists
@@ -128,7 +128,7 @@ export async function runBatch(
         onProgress({ ...progress });
         costContext = await extractCostContext(
           folder.budgetXlsx.id,
-          getAccessToken()
+          getAccessToken
         );
       }
 
@@ -142,7 +142,7 @@ export async function runBatch(
       onProgress({ ...progress });
 
       let scoreData: any;
-      const MAX_RETRIES = 2;
+      const MAX_RETRIES = 3;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         const scoreRes = await fetch("/api/score", {
           method: "POST",
