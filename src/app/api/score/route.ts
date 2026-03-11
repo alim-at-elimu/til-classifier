@@ -92,6 +92,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    console.log("ENV CHECK:", process.env.ANTHROPIC_API_KEY ? "key present" : "key MISSING", "cwd:", process.cwd());
     if (!process.env.ANTHROPIC_API_KEY) {
       return NextResponse.json(
         { error: "ANTHROPIC_API_KEY not configured" },
@@ -215,6 +216,7 @@ call1_scaled_partial: ${scaledPartial} (already scaled /60 — do not recompute)
       },
     });
   } catch (err: any) {
+    console.error("Score route error:", err);
     return NextResponse.json(
       { error: err.message || "Unknown error" },
       { status: 500 }

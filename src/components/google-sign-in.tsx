@@ -18,7 +18,7 @@ export function GoogleSignIn() {
       console.error("Google login failed");
     },
     scope: "https://www.googleapis.com/auth/drive.readonly",
-    prompt: "none", // silent re-auth when possible
+    // prompt: "none", // silent re-auth when possible
   });
 
   // auto-refresh: check every minute, re-login silently 10 minutes before expiry

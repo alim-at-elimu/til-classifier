@@ -188,7 +188,7 @@ export async function runBatch(
           const preview = rawText.slice(0, 200);
           const sizeKB = Math.round(rawText.length / 1024);
           if (attempt < MAX_RETRIES) {
-            const waitSec = 30 * (attempt + 1); // 30s, 60s, 90s, 120s, 150s
+            const waitSec = 30; // 30s, 60s, 90s, 120s, 150s
             progress.currentStep = `Scoring failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${scoreRes.status} "${preview.slice(0, 60)}..." (${sizeKB}KB). Retrying in ${waitSec}s...`;
             onProgress({ ...progress });
             await new Promise((r) => setTimeout(r, waitSec * 1000));
@@ -199,7 +199,7 @@ export async function runBatch(
 
         if (!scoreRes.ok || scoreData.error) {
           if (attempt < MAX_RETRIES && scoreRes.status >= 500) {
-            const waitSec = 30 * (attempt + 1);
+            const waitSec = 30;
             progress.currentStep = `Score API error ${scoreRes.status} (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${waitSec}s...`;
             onProgress({ ...progress });
             await new Promise((r) => setTimeout(r, waitSec * 1000));
