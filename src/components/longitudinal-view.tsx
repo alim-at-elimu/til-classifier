@@ -329,11 +329,11 @@ export function LongitudinalView({ panelistId, panelistName, batchId, onBatchCha
       {/* Controls bar */}
       <div className="flex items-center gap-4 mb-4">
         <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Batch</label>
+          <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Batch</label>
           <select
             value={batchId || ""}
             onChange={(e) => onBatchChange(e.target.value || null)}
-            className="rounded border border-gray-300 px-3 py-1.5 text-sm bg-white min-w-[280px]"
+            className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm bg-white dark:bg-gray-800 dark:text-gray-100 min-w-[280px]"
           >
             {batches.map((b) => (
               <option key={b.id} value={b.id}>
@@ -343,11 +343,11 @@ export function LongitudinalView({ panelistId, panelistName, batchId, onBatchCha
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Sub-criterion</label>
+          <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sub-criterion</label>
           <select
             value={selectedSub || ""}
             onChange={(e) => setSelectedSub(e.target.value || null)}
-            className="rounded border border-gray-300 px-3 py-1.5 text-sm bg-white min-w-[320px]"
+            className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm bg-white dark:bg-gray-800 dark:text-gray-100 min-w-[320px]"
           >
             <option value="">Select a sub-criterion...</option>
             {Object.entries(groups).map(([group, opts]) => (
@@ -368,14 +368,14 @@ export function LongitudinalView({ panelistId, panelistName, batchId, onBatchCha
       {selectedSub && rubric && (
         <>
           {/* Sticky rubric panel */}
-          <div className="sticky top-0 z-10 bg-white border border-gray-200 rounded-lg shadow-sm mb-4 overflow-hidden">
+          <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm mb-4 overflow-hidden">
             <button
               onClick={() => setRubricCollapsed(!rubricCollapsed)}
-              className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors"
+              className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             >
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Rubric</span>
-                <span className="text-sm font-semibold text-gray-900">{rubric.name}</span>
+                <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Rubric</span>
+                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{rubric.name}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-gray-400">{rubricCollapsed ? "Show" : "Hide"} anchors</span>
@@ -394,8 +394,8 @@ export function LongitudinalView({ panelistId, panelistName, batchId, onBatchCha
                         {level}
                       </span>
                       <div className="text-xs leading-relaxed">
-                        <span className="font-semibold text-gray-700">{anchor.label}:</span>{" "}
-                        <span className="text-gray-500">{anchor.text}</span>
+                        <span className="font-semibold text-gray-700 dark:text-gray-300">{anchor.label}:</span>{" "}
+                        <span className="text-gray-500 dark:text-gray-400">{anchor.text}</span>
                       </div>
                     </div>
                   );
@@ -408,12 +408,12 @@ export function LongitudinalView({ panelistId, panelistName, batchId, onBatchCha
           <div className="flex items-center gap-3 mb-3">
             <span className="text-xs text-gray-400">{rows.length} innovator{rows.length !== 1 ? "s" : ""}</span>
             <div className="text-xs text-gray-300">|</div>
-            <span className="text-xs text-gray-500">Sort by:</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">Sort by:</span>
             {(["score", "org", "country"] as SortKey[]).map((k) => (
               <button
                 key={k}
                 onClick={() => handleSort(k)}
-                className={`text-xs px-2 py-1 rounded-full font-medium transition-colors ${sortKey === k ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
+                className={`text-xs px-2 py-1 rounded-full font-medium transition-colors ${sortKey === k ? "bg-gray-900 text-white" : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"}`}
               >
                 {k === "score" ? "Score" : k === "org" ? "Organisation" : "Country"} {sortKey === k ? (sortAsc ? "↑" : "↓") : ""}
               </button>
@@ -435,9 +435,9 @@ export function LongitudinalView({ panelistId, panelistName, batchId, onBatchCha
                 const isLocked = row.status === "finalized";
 
                 return (
-                  <div key={row.proposalId} className="rounded border border-gray-200 bg-white overflow-hidden">
+                  <div key={row.proposalId} className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden">
                     {/* Header */}
-                    <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
                       <div className="flex items-center gap-3">
                         <span className={`inline-flex items-center justify-center w-7 h-7 rounded text-sm font-bold ${SCORE_BG[effectiveScore]} ${SCORE_TEXT[effectiveScore]} ${hasOverride ? "ring-2 ring-purple-400" : ""}`}>
                           {effectiveScore}
@@ -446,22 +446,22 @@ export function LongitudinalView({ panelistId, panelistName, batchId, onBatchCha
                           <span className="text-gray-400 line-through text-xs">{row.aiScore}</span>
                         )}
                         <div>
-                          <span className="text-sm font-semibold text-gray-900">{row.orgName}</span>
+                          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{row.orgName}</span>
                           <span className="text-xs text-gray-400 ml-2">{row.country}</span>
                         </div>
                         {row.theme.map((t) => (
-                          <span key={t} className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-500" title={t}>
+                          <span key={t} className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400" title={t}>
                             {t.match(/^Theme \d+/)?.[0] || t}
                           </span>
                         ))}
                         {row.borderline && (
-                          <span className="bg-amber-100 text-amber-700 rounded px-1.5 py-0.5 text-[10px] font-bold">Borderline</span>
+                          <span className="bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-400 rounded px-1.5 py-0.5 text-[10px] font-bold">Borderline</span>
                         )}
                         {row.panelVerify && (
-                          <span className="bg-purple-100 text-purple-700 rounded px-1.5 py-0.5 text-[10px] font-bold">Panel Verify</span>
+                          <span className="bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-400 rounded px-1.5 py-0.5 text-[10px] font-bold">Panel Verify</span>
                         )}
                         {isLocked && (
-                          <span className="bg-gray-200 text-gray-600 rounded px-1.5 py-0.5 text-[10px] font-bold">🔒 Locked</span>
+                          <span className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded px-1.5 py-0.5 text-[10px] font-bold">🔒 Locked</span>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
@@ -472,7 +472,7 @@ export function LongitudinalView({ panelistId, panelistName, batchId, onBatchCha
                           <button
                             onClick={() => confirmReview(row)}
                             disabled={saving}
-                            className="text-xs text-green-600 hover:text-green-800 hover:bg-green-50 rounded px-2 py-1 font-medium"
+                            className="text-xs text-green-600 hover:text-green-800 hover:bg-green-50 dark:hover:bg-green-950 rounded px-2 py-1 font-medium"
                           >
                             Confirm ✓
                           </button>
@@ -480,7 +480,7 @@ export function LongitudinalView({ panelistId, panelistName, batchId, onBatchCha
                         {!isLocked && !isEditing && (
                           <button
                             onClick={() => startEdit(row.proposalId)}
-                            className="text-xs text-gray-400 hover:text-black hover:bg-gray-100 rounded px-3 py-1"
+                            className="text-xs text-gray-400 hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-3 py-1"
                           >
                             Edit
                           </button>
@@ -492,50 +492,50 @@ export function LongitudinalView({ panelistId, panelistName, batchId, onBatchCha
                     <div className="px-4 py-3 space-y-2">
                       {row.extract && (
                         <div className="text-xs leading-relaxed">
-                          <span className="font-semibold text-gray-600">Extract: </span>
-                          <span className="italic text-gray-500">&ldquo;{row.extract}&rdquo;</span>
+                          <span className="font-semibold text-gray-600 dark:text-gray-400">Extract: </span>
+                          <span className="italic text-gray-500 dark:text-gray-400">&ldquo;{row.extract}&rdquo;</span>
                         </div>
                       )}
                       {row.interpretation && (
                         <div className="text-xs leading-relaxed">
-                          <span className="font-semibold text-gray-600">Interpretation: </span>
-                          <span className="text-gray-500">{row.interpretation}</span>
+                          <span className="font-semibold text-gray-600 dark:text-gray-400">Interpretation: </span>
+                          <span className="text-gray-500 dark:text-gray-400">{row.interpretation}</span>
                         </div>
                       )}
                       {/* Rubric anchor omitted — sticky rubric panel above shows all levels */}
                       {false && row.rubricAnchor && (
-                        <div className="rounded bg-gray-50 border border-gray-100 px-2.5 py-1.5">
+                        <div className="rounded bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 px-2.5 py-1.5">
                           <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">AI assigned rubric level {row.aiScore}</div>
-                          <div className="text-xs text-gray-500 leading-relaxed">{row.rubricAnchor}</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{row.rubricAnchor}</div>
                         </div>
                       )}
                       {row.borderline && (
-                        <div className="rounded bg-amber-50 border border-amber-200 px-2.5 py-1.5">
-                          <div className="text-xs font-semibold text-amber-700">Borderline: {row.borderline}</div>
+                        <div className="rounded bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 px-2.5 py-1.5">
+                          <div className="text-xs font-semibold text-amber-700 dark:text-amber-400">Borderline: {row.borderline}</div>
                           {row.borderlineLow && <div className="text-xs text-amber-600 mt-1">Lower ({row.aiScore}): {row.borderlineLow}</div>}
                           {row.borderlineHigh && <div className="text-xs text-amber-600 mt-1">Higher ({row.aiScore + 1}): {row.borderlineHigh}</div>}
                         </div>
                       )}
                       {row.panelVerify && (
-                        <div className="text-xs rounded bg-purple-50 border border-purple-200 px-2.5 py-1.5">
-                          <span className="font-semibold text-purple-700">Panel verify: </span>{row.panelVerify}
+                        <div className="text-xs rounded bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800 px-2.5 py-1.5">
+                          <span className="font-semibold text-purple-700 dark:text-purple-400">Panel verify: </span>{row.panelVerify}
                         </div>
                       )}
 
                       {/* Override history */}
                       {row.overrides.length > 0 && (
-                        <div className="pt-1.5 border-t border-gray-100">
-                          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Override history</div>
+                        <div className="pt-1.5 border-t border-gray-100 dark:border-gray-700">
+                          <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Override history</div>
                           <div className="space-y-1">
                             {row.overrides.map((h) => (
-                              <div key={h.id} className="text-xs bg-gray-50 border border-gray-200 rounded px-2.5 py-1.5 flex items-start gap-1.5">
+                              <div key={h.id} className="text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded px-2.5 py-1.5 flex items-start gap-1.5">
                                 <span className="flex-shrink-0 flex items-center gap-0.5">
                                   <span className={`inline-flex items-center justify-center w-5 h-5 rounded text-xs font-bold ${SCORE_BG[h.original_score]} ${SCORE_TEXT[h.original_score]}`}>{h.original_score}</span>
                                   <span className="text-gray-300">→</span>
                                   <span className={`inline-flex items-center justify-center w-5 h-5 rounded text-xs font-bold ${SCORE_BG[h.override_score]} ${SCORE_TEXT[h.override_score]}`}>{h.override_score}</span>
                                 </span>
-                                <span className="flex-1 text-gray-600 leading-relaxed">
-                                  <span className="font-semibold text-gray-800">{h.panelist_name}</span>: {h.rationale}
+                                <span className="flex-1 text-gray-600 dark:text-gray-400 leading-relaxed">
+                                  <span className="font-semibold text-gray-800 dark:text-gray-200">{h.panelist_name}</span>: {h.rationale}
                                   <span className="text-gray-400 ml-1">{new Date(h.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
                                 </span>
                               </div>
@@ -546,17 +546,17 @@ export function LongitudinalView({ panelistId, panelistName, batchId, onBatchCha
 
                       {/* Inline edit form */}
                       {isEditing && !isLocked && (
-                        <div className="pt-2 border-t border-gray-200">
-                          <div className="bg-white rounded border border-blue-300 px-3 py-2.5 shadow-sm">
-                            <div className="text-xs font-semibold text-gray-700 mb-2">Override score</div>
+                        <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                          <div className="bg-white dark:bg-gray-900 rounded border border-blue-300 dark:border-blue-600 px-3 py-2.5 shadow-sm">
+                            <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Override score</div>
                             <div className="flex items-center gap-2 mb-2">
-                              <span className="text-xs text-gray-500">Score:</span>
+                              <span className="text-xs text-gray-500 dark:text-gray-400">Score:</span>
                               <div className="flex gap-1">
                                 {[1, 2, 3, 4, 5].map((v) => (
                                   <button
                                     key={v}
                                     onClick={() => setEditScore(String(v))}
-                                    className={`w-7 h-7 rounded text-xs font-bold transition-all ${editScore === String(v) ? `${SCORE_BG[v]} ${SCORE_TEXT[v]} ring-2 ring-blue-400 scale-110` : "bg-gray-100 text-gray-400 hover:bg-gray-200"}`}
+                                    className={`w-7 h-7 rounded text-xs font-bold transition-all ${editScore === String(v) ? `${SCORE_BG[v]} ${SCORE_TEXT[v]} ring-2 ring-blue-400 scale-110` : "bg-gray-100 dark:bg-gray-800 text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"}`}
                                   >{v}</button>
                                 ))}
                               </div>
@@ -566,7 +566,7 @@ export function LongitudinalView({ panelistId, panelistName, batchId, onBatchCha
                               value={editRationale}
                               onChange={(e) => setEditRationale(e.target.value)}
                               rows={2}
-                              className="w-full text-xs border border-gray-200 rounded px-2.5 py-1.5 resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent mb-2"
+                              className="w-full text-xs border border-gray-200 dark:border-gray-700 rounded px-2.5 py-1.5 resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent mb-2 dark:bg-gray-800 dark:text-gray-100"
                             />
                             <div className="flex gap-2">
                               <button
@@ -574,7 +574,7 @@ export function LongitudinalView({ panelistId, panelistName, batchId, onBatchCha
                                 disabled={saving || !editScore || !editRationale.trim()}
                                 className="text-xs bg-black text-white rounded px-3 py-1 font-medium hover:bg-gray-800 disabled:opacity-30"
                               >{saving ? "Saving..." : "Save"}</button>
-                              <button onClick={() => { setEditingProposalId(null); setEditScore(""); setEditRationale(""); }} className="text-xs text-gray-400 hover:text-black px-2 py-1">Cancel</button>
+                              <button onClick={() => { setEditingProposalId(null); setEditScore(""); setEditRationale(""); }} className="text-xs text-gray-400 hover:text-black dark:hover:text-white px-2 py-1">Cancel</button>
                             </div>
                           </div>
                         </div>

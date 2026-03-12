@@ -347,17 +347,17 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
     <div>
       {/* Top bar */}
       <div className="flex items-center justify-between mb-4">
-        <button onClick={onBack} className="text-xs text-gray-400 hover:text-black">← Back to portfolio</button>
+        <button onClick={onBack} className="text-xs text-gray-400 hover:text-black dark:hover:text-white">← Back to portfolio</button>
         <button onClick={handleExport} className="text-xs bg-black text-white rounded px-3 py-1.5 font-medium hover:bg-gray-800">Export Report</button>
       </div>
 
       {/* Header */}
-      <div className="rounded border border-gray-200 bg-white p-4 mb-4">
+      <div className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 mb-4">
         <div className="flex items-start justify-between">
           <div>
             <h2 className="text-lg font-bold leading-tight">{proposal.org_name}</h2>
-            <div className="text-xs text-gray-500 mt-0.5">{proposal.country} · {Array.isArray(proposal.theme) ? proposal.theme.join(", ") : proposal.theme}</div>
-            {isLocked && <span className="inline-block mt-1 text-xs font-semibold bg-gray-200 text-gray-600 rounded px-1.5 py-0.5">🔒 Locked</span>}
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{proposal.country} · {Array.isArray(proposal.theme) ? proposal.theme.join(", ") : proposal.theme}</div>
+            {isLocked && <span className="inline-block mt-1 text-xs font-semibold bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded px-1.5 py-0.5">🔒 Locked</span>}
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
@@ -367,7 +367,7 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
             <span className={`px-3 py-1.5 rounded text-xs font-bold ${bandClass}`}>{totals.rec}</span>
           </div>
         </div>
-        <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+        <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
           {Object.entries(DIM_LABELS).map(([dk, label]) => {
             const s = totals.dims[dk] ?? 0;
             return (
@@ -383,16 +383,16 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
       {/* AI Recommendation + Notes */}
       <div className="space-y-2 mb-4">
         {(recommendation || summary) && (
-          <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2.5">
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">AI Recommendation</h3>
-            <div className="text-xs text-gray-700 leading-relaxed">{recommendation || summary}</div>
+          <div className="rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2.5">
+            <h3 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">AI Recommendation</h3>
+            <div className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">{recommendation || summary}</div>
           </div>
         )}
         {consistencyNotes.length > 0 && (
-          <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2.5">
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Consistency Notes</h3>
+          <div className="rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2.5">
+            <h3 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Consistency Notes</h3>
             <div className="space-y-1">
-              {consistencyNotes.map((note, i) => <div key={i} className="text-xs text-gray-600 leading-relaxed">{note}</div>)}
+              {consistencyNotes.map((note, i) => <div key={i} className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">{note}</div>)}
             </div>
           </div>
         )}
@@ -400,7 +400,7 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
 
       {/* Gates */}
       <div className="mb-4">
-        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Hard Gates</h3>
+        <h3 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Hard Gates</h3>
         <div className="grid grid-cols-3 gap-1.5">
           {Object.entries(GATE_LABELS).map(([gateKey, gateLabel]) => {
             const gate = gates[gateKey];
@@ -408,37 +408,37 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
             const passed = gate.pass !== false && gate.score >= 3;
             const isExp = expandedGate === gateKey;
             return (
-              <div key={gateKey} className="rounded border border-gray-200 overflow-hidden">
+              <div key={gateKey} className="rounded border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <button
                   onClick={() => setExpandedGate(isExp ? null : gateKey)}
-                  className={`w-full flex items-center gap-1.5 px-2.5 py-2 text-xs font-medium ${passed ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"} hover:opacity-80`}
+                  className={`w-full flex items-center gap-1.5 px-2.5 py-2 text-xs font-medium ${passed ? "bg-green-50 dark:bg-green-950 text-green-700" : "bg-red-50 dark:bg-red-950 text-red-700"} hover:opacity-80`}
                 >
                   <span className={`inline-flex items-center justify-center w-5 h-5 rounded text-xs font-bold flex-shrink-0 ${SCORE_BG[gate.score]} ${SCORE_TEXT[gate.score]}`}>{gate.score}</span>
                   <span className="flex-1 text-left">{gateLabel}</span>
                   <span className="text-gray-400 text-xs">{isExp ? "▲" : "▼"}</span>
                 </button>
                 {isExp && (
-                  <div className="px-2.5 py-2 bg-white space-y-1 border-t border-gray-100">
-                    {gate.extract && <div className="text-xs"><span className="font-semibold text-gray-600">Extract: </span><span className="italic text-gray-500">"{gate.extract}"</span></div>}
-                    {gate.interpretation && <div className="text-xs"><span className="font-semibold text-gray-600">Interpretation: </span><span className="text-gray-500">{gate.interpretation}</span></div>}
-                    {gate.rubric_anchor && <div className="text-xs bg-gray-50 rounded px-2 py-1 mt-0.5"><span className="font-semibold text-gray-600">Rubric ({gate.score}): </span><span className="text-gray-500">{gate.rubric_anchor}</span></div>}
+                  <div className="px-2.5 py-2 bg-white dark:bg-gray-900 space-y-1 border-t border-gray-100 dark:border-gray-700">
+                    {gate.extract && <div className="text-xs"><span className="font-semibold text-gray-600 dark:text-gray-400">Extract: </span><span className="italic text-gray-500 dark:text-gray-400">"{gate.extract}"</span></div>}
+                    {gate.interpretation && <div className="text-xs"><span className="font-semibold text-gray-600 dark:text-gray-400">Interpretation: </span><span className="text-gray-500 dark:text-gray-400">{gate.interpretation}</span></div>}
+                    {gate.rubric_anchor && <div className="text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 mt-0.5"><span className="font-semibold text-gray-600 dark:text-gray-400">Rubric ({gate.score}): </span><span className="text-gray-500 dark:text-gray-400">{gate.rubric_anchor}</span></div>}
                   </div>
                 )}
               </div>
             );
           })}
         </div>
-        {!allGatesPassed && <div className="mt-1.5 text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded px-2.5 py-1.5">GATE FAILURE — dimension scores are advisory only.</div>}
+        {!allGatesPassed && <div className="mt-1.5 text-xs font-bold text-red-600 bg-red-50 dark:bg-red-950 border border-red-200 rounded px-2.5 py-1.5">GATE FAILURE — dimension scores are advisory only.</div>}
       </div>
 
       {/* Score table */}
-      <div className="rounded border border-gray-200 overflow-hidden mb-4">
+      <div className="rounded border border-gray-200 dark:border-gray-700 overflow-hidden mb-4">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 dark:bg-gray-800">
             <tr>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider py-2 pl-2.5 w-8"></th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider py-2">Sub-criterion</th>
-              <th className="text-center text-xs font-semibold text-gray-500 uppercase tracking-wider py-2 w-16">{isLocked ? "" : "Edit"}</th>
+              <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider py-2 pl-2.5 w-8"></th>
+              <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider py-2">Sub-criterion</th>
+              <th className="text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider py-2 w-16">{isLocked ? "" : "Edit"}</th>
             </tr>
           </thead>
           <tbody>
@@ -463,7 +463,7 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
                   <tr key={overrideKey}>
                     <td colSpan={3} className="p-0">
                       {isFirst && (
-                        <div className="bg-gray-100 px-2.5 py-1.5 text-xs font-bold text-gray-600 border-t border-gray-200 flex justify-between items-center">
+                        <div className="bg-gray-100 dark:bg-gray-800 px-2.5 py-1.5 text-xs font-bold text-gray-600 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
                           <span>{DIM_LABELS[dimKey]}</span>
                           <span className={`text-sm tabular-nums font-bold ${dimScore >= 16 ? "text-green-600" : dimScore >= 12 ? "text-yellow-600" : "text-red-500"}`}>
                             {dimScore}<span className="text-xs text-gray-400 font-normal">/20</span>
@@ -471,7 +471,7 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
                         </div>
                       )}
                       <div
-                        className={`flex items-center px-2.5 py-1.5 cursor-pointer hover:bg-blue-50 transition-colors ${isLast && !isExp ? "border-b border-gray-100" : ""}`}
+                        className={`flex items-center px-2.5 py-1.5 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors ${isLast && !isExp ? "border-b border-gray-100 dark:border-gray-700" : ""}`}
                         onClick={() => setExpandedSub(isExp ? null : overrideKey)}
                       >
                         <div className="w-7 flex-shrink-0">
@@ -479,75 +479,75 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
                             {currentScore}
                           </span>
                         </div>
-                        <div className="flex-1 text-xs text-gray-700 flex items-center gap-1 pl-1">
+                        <div className="flex-1 text-xs text-gray-700 dark:text-gray-300 flex items-center gap-1 pl-1">
                           {SUB_LABELS[subKey] || subKey}
-                          {hasBorderline && <span className="bg-amber-100 text-amber-700 rounded px-1 py-0.5 text-xs font-bold leading-none">B</span>}
-                          {hasPanelVerify && <span className="bg-purple-100 text-purple-700 rounded px-1 py-0.5 text-xs font-bold leading-none">P</span>}
+                          {hasBorderline && <span className="bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-400 rounded px-1 py-0.5 text-xs font-bold leading-none">B</span>}
+                          {hasPanelVerify && <span className="bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-400 rounded px-1 py-0.5 text-xs font-bold leading-none">P</span>}
                           {hasOverride && <span className="text-gray-400 line-through ml-1">{aiScore}</span>}
                           {history.length > 0 && <span className="text-purple-400 text-xs">({history.length})</span>}
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                           {isReviewed && <span className="text-green-600 text-xs font-medium">✓</span>}
                           {!isLocked && !isReviewed && (
-                            <button onClick={(e) => { e.stopPropagation(); confirmSubCriterion(dimKey, subKey); }} className="text-xs text-green-600 hover:text-green-800 hover:bg-green-50 rounded px-1.5 py-0.5" title="Confirm (no change)">✓</button>
+                            <button onClick={(e) => { e.stopPropagation(); confirmSubCriterion(dimKey, subKey); }} className="text-xs text-green-600 hover:text-green-800 hover:bg-green-50 dark:hover:bg-green-950 rounded px-1.5 py-0.5" title="Confirm (no change)">✓</button>
                           )}
                           {!isLocked && (
-                            <button onClick={(e) => { e.stopPropagation(); startEdit(overrideKey); }} className="text-xs text-gray-400 hover:text-black hover:bg-gray-100 rounded px-2 py-0.5">Edit</button>
+                            <button onClick={(e) => { e.stopPropagation(); startEdit(overrideKey); }} className="text-xs text-gray-400 hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-2 py-0.5">Edit</button>
                           )}
                         </div>
                       </div>
 
                       {isExp && data && (
-                        <div className={`bg-slate-50 border-l-4 border-blue-400 px-3 py-2.5 space-y-2 ${isLast ? "border-b border-gray-100" : ""}`}>
-                          {data.extract && <div className="text-xs leading-relaxed"><span className="font-semibold text-gray-600">Extract: </span><span className="italic text-gray-500">"{data.extract}"</span></div>}
-                          {data.interpretation && <div className="text-xs leading-relaxed"><span className="font-semibold text-gray-600">Interpretation: </span><span className="text-gray-500">{data.interpretation}</span></div>}
+                        <div className={`bg-slate-50 dark:bg-gray-800 border-l-4 border-blue-400 px-3 py-2.5 space-y-2 ${isLast ? "border-b border-gray-100 dark:border-gray-700" : ""}`}>
+                          {data.extract && <div className="text-xs leading-relaxed"><span className="font-semibold text-gray-600 dark:text-gray-400">Extract: </span><span className="italic text-gray-500 dark:text-gray-400">"{data.extract}"</span></div>}
+                          {data.interpretation && <div className="text-xs leading-relaxed"><span className="font-semibold text-gray-600 dark:text-gray-400">Interpretation: </span><span className="text-gray-500 dark:text-gray-400">{data.interpretation}</span></div>}
                           {data.rubric_anchor && (
-                            <div className="rounded bg-white border border-gray-200 px-2.5 py-1.5">
+                            <div className="rounded bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-2.5 py-1.5">
                               <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Rubric level {aiScore}</div>
-                              <div className="text-xs text-gray-500 leading-relaxed">{data.rubric_anchor}</div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{data.rubric_anchor}</div>
                             </div>
                           )}
                           {hasBorderline && (
-                            <div className="rounded bg-amber-50 border border-amber-200 px-2.5 py-2 space-y-1.5">
-                              <div className="text-xs font-semibold text-amber-700">Borderline: {data.borderline}</div>
+                            <div className="rounded bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 px-2.5 py-2 space-y-1.5">
+                              <div className="text-xs font-semibold text-amber-700 dark:text-amber-400">Borderline: {data.borderline}</div>
                               {data.borderline_rubric_low && (
-                                <div className="rounded bg-white border border-amber-100 px-2.5 py-1">
+                                <div className="rounded bg-white dark:bg-gray-900 border border-amber-100 dark:border-amber-800 px-2.5 py-1">
                                   <div className="flex items-center gap-1.5 mb-0.5">
                                     <span className={`inline-flex items-center justify-center w-5 h-5 rounded text-xs font-bold ${SCORE_BG[aiScore]} ${SCORE_TEXT[aiScore]}`}>{aiScore}</span>
-                                    <span className="text-xs font-semibold text-gray-600">Lower level (awarded)</span>
+                                    <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">Lower level (awarded)</span>
                                   </div>
-                                  <div className="text-xs text-gray-500 ml-6">{data.borderline_rubric_low}</div>
+                                  <div className="text-xs text-gray-500 dark:text-gray-400 ml-6">{data.borderline_rubric_low}</div>
                                 </div>
                               )}
                               {data.borderline_rubric_high && (
-                                <div className="rounded bg-white border border-amber-100 px-2.5 py-1">
+                                <div className="rounded bg-white dark:bg-gray-900 border border-amber-100 dark:border-amber-800 px-2.5 py-1">
                                   <div className="flex items-center gap-1.5 mb-0.5">
                                     <span className={`inline-flex items-center justify-center w-5 h-5 rounded text-xs font-bold ${SCORE_BG[Math.min(aiScore + 1, 5)]} ${SCORE_TEXT[Math.min(aiScore + 1, 5)]}`}>{aiScore + 1}</span>
-                                    <span className="text-xs font-semibold text-gray-600">Higher level (not awarded)</span>
+                                    <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">Higher level (not awarded)</span>
                                   </div>
-                                  <div className="text-xs text-gray-500 ml-6">{data.borderline_rubric_high}</div>
+                                  <div className="text-xs text-gray-500 dark:text-gray-400 ml-6">{data.borderline_rubric_high}</div>
                                 </div>
                               )}
                             </div>
                           )}
                           {hasPanelVerify && (
-                            <div className="text-xs rounded bg-purple-50 border border-purple-200 px-2.5 py-1.5">
-                              <span className="font-semibold text-purple-700">Panel verify: </span>{data.panel_verify}
+                            <div className="text-xs rounded bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800 px-2.5 py-1.5">
+                              <span className="font-semibold text-purple-700 dark:text-purple-400">Panel verify: </span>{data.panel_verify}
                             </div>
                           )}
                           {history.length > 0 && (
-                            <div className="pt-1.5 border-t border-gray-200">
-                              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Override history</div>
+                            <div className="pt-1.5 border-t border-gray-200 dark:border-gray-700">
+                              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Override history</div>
                               <div className="space-y-1">
                                 {history.map((h) => (
-                                  <div key={h.id} className="text-xs bg-white border border-gray-200 rounded px-2.5 py-1.5 flex items-start gap-1.5">
+                                  <div key={h.id} className="text-xs bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded px-2.5 py-1.5 flex items-start gap-1.5">
                                     <span className="flex-shrink-0 flex items-center gap-0.5">
                                       <span className={`inline-flex items-center justify-center w-5 h-5 rounded text-xs font-bold ${SCORE_BG[h.original_score]} ${SCORE_TEXT[h.original_score]}`}>{h.original_score}</span>
                                       <span className="text-gray-300">→</span>
                                       <span className={`inline-flex items-center justify-center w-5 h-5 rounded text-xs font-bold ${SCORE_BG[h.override_score]} ${SCORE_TEXT[h.override_score]}`}>{h.override_score}</span>
                                     </span>
-                                    <span className="flex-1 text-gray-600 leading-relaxed">
-                                      <span className="font-semibold text-gray-800">{h.panelist_name}</span>: {h.rationale}
+                                    <span className="flex-1 text-gray-600 dark:text-gray-400 leading-relaxed">
+                                      <span className="font-semibold text-gray-800 dark:text-gray-200">{h.panelist_name}</span>: {h.rationale}
                                       <span className="text-gray-400 ml-1">{new Date(h.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
                                     </span>
                                   </div>
@@ -556,17 +556,17 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
                             </div>
                           )}
                           {isEditing && !isLocked && (
-                            <div className="pt-1.5 border-t border-gray-200">
-                              <div className="bg-white rounded border border-blue-300 px-3 py-2.5 shadow-sm">
-                                <div className="text-xs font-semibold text-gray-700 mb-2">Override score</div>
+                            <div className="pt-1.5 border-t border-gray-200 dark:border-gray-700">
+                              <div className="bg-white dark:bg-gray-900 rounded border border-blue-300 dark:border-blue-600 px-3 py-2.5 shadow-sm">
+                                <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Override score</div>
                                 <div className="flex items-center gap-2 mb-2">
-                                  <span className="text-xs text-gray-500">Score:</span>
+                                  <span className="text-xs text-gray-500 dark:text-gray-400">Score:</span>
                                   <div className="flex gap-1">
                                     {[1, 2, 3, 4, 5].map((v) => (
                                       <button
                                         key={v}
                                         onClick={() => setEditScore(String(v))}
-                                        className={`w-7 h-7 rounded text-xs font-bold transition-all ${editScore === String(v) ? `${SCORE_BG[v]} ${SCORE_TEXT[v]} ring-2 ring-blue-400 scale-110` : "bg-gray-100 text-gray-400 hover:bg-gray-200"}`}
+                                        className={`w-7 h-7 rounded text-xs font-bold transition-all ${editScore === String(v) ? `${SCORE_BG[v]} ${SCORE_TEXT[v]} ring-2 ring-blue-400 scale-110` : "bg-gray-100 dark:bg-gray-800 text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"}`}
                                       >{v}</button>
                                     ))}
                                   </div>
@@ -576,7 +576,7 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
                                   value={editRationale}
                                   onChange={(e) => setEditRationale(e.target.value)}
                                   rows={2}
-                                  className="w-full text-xs border border-gray-200 rounded px-2.5 py-1.5 resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent mb-2"
+                                  className="w-full text-xs border border-gray-200 dark:border-gray-700 rounded px-2.5 py-1.5 resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent mb-2"
                                 />
                                 <div className="flex gap-2">
                                   <button
@@ -584,7 +584,7 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
                                     disabled={saving || !editScore || !editRationale.trim()}
                                     className="text-xs bg-black text-white rounded px-3 py-1 font-medium hover:bg-gray-800 disabled:opacity-30"
                                   >{saving ? "Saving..." : "Save"}</button>
-                                  <button onClick={() => { setEditingSub(null); setEditScore(""); setEditRationale(""); }} className="text-xs text-gray-400 hover:text-black px-2 py-1">Cancel</button>
+                                  <button onClick={() => { setEditingSub(null); setEditScore(""); setEditRationale(""); }} className="text-xs text-gray-400 hover:text-black dark:hover:text-white px-2 py-1">Cancel</button>
                                 </div>
                               </div>
                             </div>

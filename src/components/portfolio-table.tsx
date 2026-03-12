@@ -429,7 +429,7 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
     const active = sortKey === sortKeyName;
     return (
       <th
-        className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-black select-none"
+        className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-black dark:hover:text-white select-none"
         onClick={() => handleSort(sortKeyName)}
       >
         {label} {active ? (sortDir === "asc" ? "↑" : "↓") : ""}
@@ -437,8 +437,8 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
     );
   }
 
-  if (loading) return <div className="text-sm text-gray-500">Loading proposals...</div>;
-  if (proposals.length === 0) return <div className="text-sm text-gray-500">No scored proposals found. Run a batch first.</div>;
+  if (loading) return <div className="text-sm text-gray-500 dark:text-gray-400">Loading proposals...</div>;
+  if (proposals.length === 0) return <div className="text-sm text-gray-500 dark:text-gray-400">No scored proposals found. Run a batch first.</div>;
 
   const borderlineCount = proposals.filter((p) => isBorderline(p.raw_total)).length;
   const unassignedBorderline = proposals.filter((p) => isBorderline(p.raw_total) && !p.lead_reviewer_id).length;
@@ -447,11 +447,11 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
     <div>
       {/* Batch selector */}
       <div className="flex items-center gap-3 mb-4">
-        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Batch</label>
+        <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Batch</label>
         <select
           value={batchId || ""}
           onChange={(e) => onBatchChange(e.target.value || null)}
-          className="rounded border border-gray-300 px-3 py-1.5 text-sm bg-white min-w-[300px]"
+          className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm bg-white dark:bg-gray-800 dark:text-gray-100 min-w-[300px]"
         >
           {batches.map((b) => (
             <option key={b.id} value={b.id}>
@@ -459,21 +459,21 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
             </option>
           ))}
         </select>
-        <span className="text-xs text-gray-400">{batches.length} batch{batches.length !== 1 ? "es" : ""}</span>
+        <span className="text-xs text-gray-400 dark:text-gray-400">{batches.length} batch{batches.length !== 1 ? "es" : ""}</span>
       </div>
 
       {/* Top bar */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
-          <div className="text-xs text-gray-400">{displayed.length} of {proposals.length} proposal{proposals.length !== 1 ? "s" : ""}</div>
+          <div className="text-xs text-gray-400 dark:text-gray-400">{displayed.length} of {proposals.length} proposal{proposals.length !== 1 ? "s" : ""}</div>
           {borderlineCount > 0 && (
             <div className="text-xs text-orange-600">{borderlineCount} for review (75-84)</div>
           )}
-          <div className="text-xs text-gray-300">|</div>
+          <div className="text-xs text-gray-300 dark:text-gray-600">|</div>
           {/* Theme filter tabs */}
           <button
             onClick={() => setFilterTheme(null)}
-            className={`text-xs px-2 py-1 rounded-full font-medium transition-colors ${!filterTheme ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
+            className={`text-xs px-2 py-1 rounded-full font-medium transition-colors ${!filterTheme ? "bg-gray-900 text-white" : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"}`}
           >
             All
           </button>
@@ -487,7 +487,7 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
                 key={t}
                 onClick={() => setFilterTheme(isActive ? null : t)}
                 title={t}
-                className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${isActive ? `${colors.bg} ${colors.text} ring-1 ${colors.ring}` : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
+                className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${isActive ? `${colors.bg} ${colors.text} ring-1 ${colors.ring}` : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"}`}
               >
                 {THEME_SHORT[t]} <span className="text-[10px] opacity-70">{count}</span>
               </button>
@@ -514,9 +514,9 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded border border-gray-200">
+      <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-700">
          <table className="w-full text-sm">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 dark:bg-gray-800">
             <tr>
               <SortHeader label="Organisation" sortKeyName="org_name" />
               <SortHeader label="Country" sortKeyName="country" />
@@ -524,11 +524,11 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
               <SortHeader label="Gates" sortKeyName="gates_passed" />
               <SortHeader label="Score" sortKeyName="raw_total" />
               <SortHeader label="Band" sortKeyName="recommendation" />
-              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Review</th>
-              <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-16">Status</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Review</th>
+              <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-16">Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
             {displayed.map((p) => {
               const band = BAND_STYLE[p.recommendation || ""] || { bg: "bg-gray-100", text: "text-gray-600" };
               const isLocked = p.status === "finalized";
@@ -537,11 +537,11 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
               return (
                 <tr
                   key={p.id}
-                  className={`hover:bg-blue-50 cursor-pointer transition-colors ${isLocked ? "bg-gray-50" : ""}`}
+                  className={`hover:bg-blue-50 dark:hover:bg-blue-950 cursor-pointer transition-colors ${isLocked ? "bg-gray-50 dark:bg-gray-800" : ""}`}
                   onClick={() => onSelectProposal(p.id)}
                 >
                   <td className="px-3 py-2.5 font-medium">{p.org_name}</td>
-                  <td className="px-3 py-2.5 text-gray-600">{p.country}</td>
+                  <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400">{p.country}</td>
                   <td className="px-3 py-2.5">
                     <div className="flex gap-1">
                       {p.theme.map((t) => {
@@ -550,7 +550,7 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
                         return colors ? (
                           <span key={t} className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${colors.bg} ${colors.text} cursor-default`} title={t}>{short}</span>
                         ) : (
-                          <span key={t} className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-500 cursor-default" title={t}>{short}</span>
+                          <span key={t} className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-default" title={t}>{short}</span>
                         );
                       })}
                     </div>
@@ -572,7 +572,7 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
                     {borderline ? (
                       <div className="flex items-center gap-1.5">
                         <span className="inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-orange-100 text-orange-700">Review</span>
-                        {reviewerName && <span className="text-xs text-gray-500">{reviewerName}</span>}
+                        {reviewerName && <span className="text-xs text-gray-500 dark:text-gray-400">{reviewerName}</span>}
                       </div>
                     ) : null}
                   </td>
@@ -580,10 +580,10 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
                     {isLocked ? (
                       <div className="flex items-center justify-center gap-1.5">
                         <span className="text-xs text-green-700 font-medium">Reviewed{getReviewerName(p.finalized_by) ? ` by ${getReviewerName(p.finalized_by)}` : ""}</span>
-                        <button onClick={() => setUnlockConfirm(p.id)} className="text-xs text-gray-400 hover:text-black" title="Unlock">🔓</button>
+                        <button onClick={() => setUnlockConfirm(p.id)} className="text-xs text-gray-400 hover:text-black dark:hover:text-white" title="Unlock">🔓</button>
                       </div>
                     ) : (
-                      <button onClick={() => handleLock(p.id)} className="text-xs text-gray-300 hover:text-black" title="Click to review">☐</button>
+                      <button onClick={() => handleLock(p.id)} className="text-xs text-gray-300 hover:text-black dark:hover:text-white" title="Click to review">☐</button>
                     )}
                   </td>
                 </tr>
@@ -596,14 +596,14 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
       {/* Unlock confirmation modal */}
       {unlockConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
+          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
             <h3 className="text-sm font-bold mb-2">Unlock this proposal?</h3>
-            <p className="text-xs text-gray-500 mb-4">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
               This will allow edits again. Confirming as <span className="font-semibold text-black">{panelistName || "Unknown"}</span>.
             </p>
             <div className="flex gap-2">
               <button onClick={() => handleUnlock(unlockConfirm)} className="text-xs bg-black text-white rounded px-4 py-1.5 font-medium hover:bg-gray-800">Unlock</button>
-              <button onClick={() => setUnlockConfirm(null)} className="text-xs text-gray-500 hover:text-black px-4 py-1.5">Cancel</button>
+              <button onClick={() => setUnlockConfirm(null)} className="text-xs text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white px-4 py-1.5">Cancel</button>
             </div>
           </div>
         </div>

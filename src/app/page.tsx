@@ -144,7 +144,7 @@ export default function Home() {
   const readyCount = folders ? folders.filter((f) => f.proposalPdf).length : 0;
 
   return (
-    <main className="max-w-7xl mx-auto p-10 font-mono bg-white text-black min-h-screen">
+    <main className="max-w-7xl mx-auto p-10 font-mono bg-white dark:bg-gray-950 text-black dark:text-gray-100 min-h-screen">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">TIL RFP Classifier</h1>
         {currentPanelist && (
@@ -153,7 +153,7 @@ export default function Home() {
             <span className="font-semibold">{currentPanelist.name}</span>
             <button
               onClick={() => setShowPanelistModal(true)}
-              className="text-xs text-gray-400 hover:text-black underline ml-1"
+              className="text-xs text-gray-400 hover:text-black dark:hover:text-white underline ml-1"
             >
               switch
             </button>
@@ -170,28 +170,28 @@ export default function Home() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex border-b border-gray-300 mb-6">
+      <div className="flex border-b border-gray-300 dark:border-gray-700 mb-6">
         <button
           onClick={() => { setActiveTab("batch"); setSelectedProposalId(null); }}
-          className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "batch" ? "border-black text-black" : "border-transparent text-gray-400 hover:text-gray-600"}`}
+          className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "batch" ? "border-black dark:border-white text-black dark:text-white" : "border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}
         >
           Batch
         </button>
         <button
           onClick={() => { setActiveTab("review"); setSelectedProposalId(null); }}
-          className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "review" ? "border-black text-black" : "border-transparent text-gray-400 hover:text-gray-600"}`}
+          className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "review" ? "border-black dark:border-white text-black dark:text-white" : "border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}
         >
           Review
         </button>
         <button
           onClick={() => { setActiveTab("analytics"); setSelectedProposalId(null); }}
-          className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "analytics" ? "border-black text-black" : "border-transparent text-gray-400 hover:text-gray-600"}`}
+          className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "analytics" ? "border-black dark:border-white text-black dark:text-white" : "border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}
         >
           Analytics
         </button>
         <button
           onClick={() => { setActiveTab("longitudinal"); setSelectedProposalId(null); }}
-          className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "longitudinal" ? "border-black text-black" : "border-transparent text-gray-400 hover:text-gray-600"}`}
+          className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "longitudinal" ? "border-black dark:border-white text-black dark:text-white" : "border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}
         >
           Longitudinal
         </button>
@@ -206,13 +206,13 @@ export default function Home() {
           {folders && !batchRunning && !batchProgress && (
             <>
               <PreflightTable folders={folders} />
-              <div className="mt-6 p-4 bg-gray-50 rounded border border-gray-200">
+              <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700">
                 <label className="block text-sm font-medium mb-1">Batch Name</label>
                 <input
                   type="text"
                   value={batchName}
                   onChange={(e) => setBatchName(e.target.value)}
-                  className="rounded border border-gray-300 px-3 py-2 text-sm mb-3 w-full max-w-md"
+                  className="rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 px-3 py-2 text-sm mb-3 w-full max-w-md"
                 />
                 <label className="block text-sm font-medium mb-1">Number of runs</label>
                 <input
@@ -221,7 +221,7 @@ export default function Home() {
                   max={10}
                   value={runCount}
                   onChange={(e) => setRunCount(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
-                  className="rounded border border-gray-300 px-3 py-2 text-sm mb-3 w-24"
+                  className="rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 px-3 py-2 text-sm mb-3 w-24"
                 />
                 <div className="flex items-center gap-4">
                   <button
@@ -245,7 +245,7 @@ export default function Home() {
           )}
           {/* Resume existing batch */}
           {folders && !batchRunning && !batchProgress && resumableBatches.length > 0 && (
-            <div className="mt-4 p-4 bg-amber-50 rounded border border-amber-200">
+            <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-950 rounded border border-amber-200 dark:border-amber-800">
               <label className="block text-sm font-medium mb-2 text-amber-800">Resume Incomplete Batch</label>
               <p className="text-xs text-amber-600 mb-3">
                 These batches have proposals that errored or didn't finish scoring. Select one to re-run only the incomplete proposals.
@@ -253,7 +253,7 @@ export default function Home() {
               <select
                 value={selectedResumeBatchId || ""}
                 onChange={(e) => setSelectedResumeBatchId(e.target.value || null)}
-                className="rounded border border-amber-300 px-3 py-2 text-sm mb-3 w-full max-w-lg bg-white"
+                className="rounded border border-amber-300 dark:border-amber-700 px-3 py-2 text-sm mb-3 w-full max-w-lg bg-white dark:bg-gray-800 dark:text-gray-100"
               >
                 <option value="">Select a batch to resume...</option>
                 {resumableBatches.map((b) => (
@@ -315,15 +315,15 @@ export default function Home() {
       {/* Panelist selection modal */}
       {showPanelistModal && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-2xl p-8 max-w-sm w-full mx-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl p-8 max-w-sm w-full mx-4">
             <h2 className="text-lg font-bold mb-1">Who are you?</h2>
-            <p className="text-sm text-gray-500 mb-5">Select your name to track overrides.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Select your name to track overrides.</p>
             <div className="space-y-2">
               {panelists.map((p) => (
                 <button
                   key={p.id}
                   onClick={() => handleSelectPanelist(p)}
-                  className="w-full text-left px-4 py-3 rounded-lg border border-gray-200 hover:border-black hover:bg-gray-50 text-sm font-medium transition-colors"
+                  className="w-full text-left px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-black dark:hover:border-white hover:bg-gray-50 dark:hover:bg-gray-800 text-sm font-medium transition-colors"
                 >
                   {p.name}
                 </button>
@@ -332,7 +332,7 @@ export default function Home() {
             {currentPanelist && (
               <button
                 onClick={() => setShowPanelistModal(false)}
-                className="mt-4 text-xs text-gray-400 hover:text-black w-full text-center"
+                className="mt-4 text-xs text-gray-400 hover:text-black dark:hover:text-white w-full text-center"
               >
                 Cancel
               </button>

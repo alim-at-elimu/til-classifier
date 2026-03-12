@@ -198,7 +198,7 @@ function SortHeader({ label, sortKey, currentSort, onSort }: {
   const arrow = active ? (currentSort.dir === "desc" ? " ↓" : " ↑") : "";
   return (
     <th
-      className="text-center px-2 py-2 font-medium text-gray-600 cursor-pointer hover:text-black select-none"
+      className="text-center px-2 py-2 font-medium text-gray-600 dark:text-gray-400 cursor-pointer hover:text-black dark:hover:text-white select-none"
       onClick={() => onSort(sortKey)}
     >
       {label}{arrow}
@@ -376,11 +376,11 @@ export function AnalyticsDashboard() {
       {/* Filters */}
       <div className="flex items-center gap-4">
         <div className="text-sm font-medium">Filters:</div>
-        <select value={filterCountry} onChange={(e) => setFilterCountry(e.target.value)} className="text-sm border border-gray-300 rounded px-2 py-1">
+        <select value={filterCountry} onChange={(e) => setFilterCountry(e.target.value)} className="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1 dark:bg-gray-800 dark:text-gray-100">
           <option value="all">All countries ({data.length})</option>
           {countries.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
-        <select value={filterTheme} onChange={(e) => setFilterTheme(e.target.value)} className="text-sm border border-gray-300 rounded px-2 py-1">
+        <select value={filterTheme} onChange={(e) => setFilterTheme(e.target.value)} className="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1 dark:bg-gray-800 dark:text-gray-100">
           <option value="all">All themes</option>
           {themes.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
@@ -394,14 +394,14 @@ export function AnalyticsDashboard() {
       <section>
         <h2 className="text-sm font-bold mb-3">Score Distribution</h2>
         <div className="grid grid-cols-2 gap-6">
-          <div className="border border-gray-200 rounded p-4">
-            <div className="text-xs text-gray-500 mb-3">By recommendation band</div>
+          <div className="border border-gray-200 dark:border-gray-700 rounded p-4">
+            <div className="text-xs text-gray-500 dark:text-gray-400 mb-3">By recommendation band</div>
             <div className="space-y-2">
               {BANDS.map((band) => (
                 <Tooltip key={band} content={bandMembers[band].length > 0 ? <div>{bandMembers[band].map((n, i) => <div key={i}>{n}</div>)}</div> : <div>No proposals</div>}>
                   <div className="flex items-center gap-2 cursor-default">
                     <div className="text-xs w-20">{band}</div>
-                    <div className="flex-1 bg-gray-100 rounded h-5 relative">
+                    <div className="flex-1 bg-gray-100 dark:bg-gray-800 rounded h-5 relative">
                       <div className={`h-5 rounded ${BAND_COLORS[band]}`} style={{ width: `${(bandCounts[band] / maxBar) * 100}%` }} />
                     </div>
                     <div className="text-xs font-medium w-6 text-right">{bandCounts[band]}</div>
@@ -410,16 +410,16 @@ export function AnalyticsDashboard() {
               ))}
             </div>
           </div>
-          <div className="border border-gray-200 rounded overflow-hidden">
-            <div className="text-xs text-gray-500 px-4 pt-3 pb-2">By theme</div>
+          <div className="border border-gray-200 dark:border-gray-700 rounded overflow-hidden">
+            <div className="text-xs text-gray-500 dark:text-gray-400 px-4 pt-3 pb-2">By theme</div>
             <table className="w-full text-xs border-collapse">
               <thead>
-                <tr className="bg-gray-50">
-                  <th className="text-left px-4 py-2 font-medium text-gray-600">Theme</th>
+                <tr className="bg-gray-50 dark:bg-gray-800">
+                  <th className="text-left px-4 py-2 font-medium text-gray-600 dark:text-gray-400">Theme</th>
                   {BANDS.map((band) => (
-                    <th key={band} className="text-center px-3 py-2 font-medium text-gray-600 w-20">{band}</th>
+                    <th key={band} className="text-center px-3 py-2 font-medium text-gray-600 dark:text-gray-400 w-20">{band}</th>
                   ))}
-                  <th className="text-center px-3 py-2 font-medium text-gray-600 w-16">Total</th>
+                  <th className="text-center px-3 py-2 font-medium text-gray-600 dark:text-gray-400 w-16">Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -431,8 +431,8 @@ export function AnalyticsDashboard() {
                   const bandTextColor: Record<string, string> = { Excellent: "text-green-700", Good: "text-blue-700", Weak: "text-yellow-700", Fail: "text-red-700" };
                   const bandBgColor: Record<string, string> = { Excellent: "bg-green-50", Good: "bg-blue-50", Weak: "bg-yellow-50", Fail: "bg-red-50" };
                   return (
-                    <tr key={theme} className="border-t border-gray-100">
-                      <td className="px-4 py-2 font-medium text-gray-700">{theme}</td>
+                    <tr key={theme} className="border-t border-gray-100 dark:border-gray-700">
+                      <td className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">{theme}</td>
                       {BANDS.map((band) => (
                         <td key={band} className="text-center px-3 py-2">
                           {themeBands[band] > 0 ? (
@@ -442,7 +442,7 @@ export function AnalyticsDashboard() {
                           )}
                         </td>
                       ))}
-                      <td className="text-center px-3 py-2 font-bold text-gray-700">{themeItems.length}</td>
+                      <td className="text-center px-3 py-2 font-bold text-gray-700 dark:text-gray-300">{themeItems.length}</td>
                     </tr>
                   );
                 })}
@@ -458,7 +458,7 @@ export function AnalyticsDashboard() {
       {/* 2. Gate Pass/Fail */}
       <section>
         <h2 className="text-sm font-bold mb-3">Gate Pass/Fail Rates</h2>
-        <div className="border border-gray-200 rounded p-4">
+        <div className="border border-gray-200 dark:border-gray-700 rounded p-4">
           <div className="space-y-3">
             {gateKeys.map((gk) => {
               const { pass, fail } = gateCounts[gk];
@@ -467,7 +467,7 @@ export function AnalyticsDashboard() {
               return (
                 <div key={gk} className="flex items-center gap-3">
                   <div className="text-xs w-44">{GATE_LABELS[gk]}</div>
-                  <div className="flex-1 bg-gray-100 rounded h-5 relative overflow-hidden">
+                  <div className="flex-1 bg-gray-100 dark:bg-gray-800 rounded h-5 relative overflow-hidden">
                     <div className="h-5 bg-green-600 rounded-l" style={{ width: `${pct}%` }} />
                   </div>
                   <div className="text-xs w-20 text-right">
@@ -484,13 +484,13 @@ export function AnalyticsDashboard() {
       {/* 3. Sub-Criterion Heat Map */}
       <section>
         <h2 className="text-sm font-bold mb-3">Sub-Criterion Heat Map (portfolio averages)</h2>
-        <div className="border border-gray-200 rounded overflow-hidden">
+        <div className="border border-gray-200 dark:border-gray-700 rounded overflow-hidden">
           <table className="w-full text-xs border-collapse">
             <thead>
-              <tr className="bg-gray-50">
-                <th className="text-left px-3 py-2 font-medium text-gray-600">Dimension</th>
-                <th className="text-left px-3 py-2 font-medium text-gray-600">Sub-criterion</th>
-                <th className="text-center px-3 py-2 font-medium text-gray-600 w-16">Avg</th>
+              <tr className="bg-gray-50 dark:bg-gray-800">
+                <th className="text-left px-3 py-2 font-medium text-gray-600 dark:text-gray-400">Dimension</th>
+                <th className="text-left px-3 py-2 font-medium text-gray-600 dark:text-gray-400">Sub-criterion</th>
+                <th className="text-center px-3 py-2 font-medium text-gray-600 dark:text-gray-400 w-16">Avg</th>
                 <th className="px-3 py-2 w-48"></th>
               </tr>
             </thead>
@@ -499,16 +499,16 @@ export function AnalyticsDashboard() {
                 const isFirst = i === 0 || subStats[i - 1].dimKey !== dimKey;
                 const span = DIM_DEFS[dimKey].length;
                 return (
-                  <tr key={`${dimKey}.${subKey}`} className="border-t border-gray-100">
-                    {isFirst && <td className="px-3 py-2 font-medium text-gray-700 align-top" rowSpan={span}>{DIM_LABELS[dimKey]}</td>}
-                    <td className="px-3 py-2 text-gray-600">{SUB_LABELS[subKey] || subKey}</td>
+                  <tr key={`${dimKey}.${subKey}`} className="border-t border-gray-100 dark:border-gray-700">
+                    {isFirst && <td className="px-3 py-2 font-medium text-gray-700 dark:text-gray-300 align-top" rowSpan={span}>{DIM_LABELS[dimKey]}</td>}
+                    <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{SUB_LABELS[subKey] || subKey}</td>
                     <td className="px-3 py-2 text-center">
                       <Tooltip content={<div>Min {min} · Med {med.toFixed(1)} · Max {max} · SD {sd.toFixed(1)}</div>}>
                         <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium cursor-default ${scoreColor(avg)}`}>{avg.toFixed(1)}</span>
                       </Tooltip>
                     </td>
                     <td className="px-3 py-2">
-                      <div className="bg-gray-100 rounded h-3 w-full">
+                      <div className="bg-gray-100 dark:bg-gray-800 rounded h-3 w-full">
                         <div className={`h-3 rounded ${barColor(avg)}`} style={{ width: `${(avg / 5) * 100}%` }} />
                       </div>
                     </td>
@@ -525,10 +525,10 @@ export function AnalyticsDashboard() {
       <section>
         <h2 className="text-sm font-bold mb-3">Override Frequency by Sub-Criterion</h2>
         {overrideFreqSorted.length === 0 ? (
-          <div className="border border-gray-200 rounded p-4 text-xs text-gray-400">No overrides recorded yet.</div>
+          <div className="border border-gray-200 dark:border-gray-700 rounded p-4 text-xs text-gray-400">No overrides recorded yet.</div>
         ) : (
-          <div className="border border-gray-200 rounded p-4">
-            <div className="text-xs text-gray-500 mb-3">Sub-criteria most frequently overridden by the panel</div>
+          <div className="border border-gray-200 dark:border-gray-700 rounded p-4">
+            <div className="text-xs text-gray-500 dark:text-gray-400 mb-3">Sub-criteria most frequently overridden by the panel</div>
             <div className="space-y-2">
               {overrideFreqSorted.map(([key, items]) => {
                 const parts = key.split(".");
@@ -536,7 +536,7 @@ export function AnalyticsDashboard() {
                   <Tooltip key={key} content={<div className="space-y-1">{items.map((it, i) => <div key={i}>{it.orgName}: {it.original} → {it.override}</div>)}</div>}>
                     <div className="flex items-center gap-2 cursor-default">
                       <div className="text-xs w-72"><span className="text-gray-400">{DIM_LABELS[parts[0]] || parts[0]} ›</span> {SUB_LABELS[parts[1]] || parts[1]}</div>
-                      <div className="flex-1 bg-gray-100 rounded h-4">
+                      <div className="flex-1 bg-gray-100 dark:bg-gray-800 rounded h-4">
                         <div className="h-4 rounded bg-purple-500" style={{ width: `${(items.length / maxOverrideCount) * 100}%` }} />
                       </div>
                       <div className="text-xs font-medium w-6 text-right">{items.length}</div>
@@ -553,13 +553,13 @@ export function AnalyticsDashboard() {
       <section>
         <h2 className="text-sm font-bold mb-3">Band Movements (AI → Panel-Adjusted)</h2>
         {bandMovements.length === 0 ? (
-          <div className="border border-gray-200 rounded p-4 text-xs text-gray-400">No band changes from panel overrides.</div>
+          <div className="border border-gray-200 dark:border-gray-700 rounded p-4 text-xs text-gray-400">No band changes from panel overrides.</div>
         ) : (
-          <div className="border border-gray-200 rounded p-4">
+          <div className="border border-gray-200 dark:border-gray-700 rounded p-4">
             <div className="space-y-2">
               {bandMovements.map((bm, i) => (
                 <div key={i} className="flex items-center gap-3 text-xs">
-                  <div className="w-48 font-medium text-gray-700">{bm.name}</div>
+                  <div className="w-48 font-medium text-gray-700 dark:text-gray-300">{bm.name}</div>
                   <span className={`px-2 py-0.5 rounded font-medium ${BAND_COLORS[bm.aiBand]} text-white`}>{bm.aiBand} ({bm.aiTotal})</span>
                   <span className="text-gray-400">→</span>
                   <span className={`px-2 py-0.5 rounded font-medium ${BAND_COLORS[bm.adjBand]} text-white`}>{bm.adjBand} ({bm.adjTotal})</span>
@@ -573,11 +573,11 @@ export function AnalyticsDashboard() {
       {/* 6. AI vs Panel-Adjusted Scores */}
       <section>
         <h2 className="text-sm font-bold mb-3">AI vs. Panel-Adjusted Scores</h2>
-        <div className="border border-gray-200 rounded overflow-hidden">
+        <div className="border border-gray-200 dark:border-gray-700 rounded overflow-hidden">
           <table className="w-full text-xs border-collapse">
             <thead>
-              <tr className="bg-gray-50">
-                <th className="text-left px-3 py-2 font-medium text-gray-600 cursor-pointer hover:text-black select-none" onClick={() => toggleSort(aiPanelSort, "name", setAiPanelSort)}>
+              <tr className="bg-gray-50 dark:bg-gray-800">
+                <th className="text-left px-3 py-2 font-medium text-gray-600 dark:text-gray-400 cursor-pointer hover:text-black dark:hover:text-white select-none" onClick={() => toggleSort(aiPanelSort, "name", setAiPanelSort)}>
                   Proposal{aiPanelSort.key === "name" ? (aiPanelSort.dir === "desc" ? " ↓" : " ↑") : ""}
                 </th>
                 {DIM_KEYS.map((dk) => (
@@ -597,8 +597,8 @@ export function AnalyticsDashboard() {
                 const reviewedCount = reviewedKeys.size;
                 const allReviewed = reviewedCount >= totalSubCriteria;
                 return (
-                  <tr key={d.proposal.id} className="border-t border-gray-100">
-                    <td className={`px-3 py-2 font-medium ${allReviewed ? "text-gray-700" : "text-red-600"}`}>
+                  <tr key={d.proposal.id} className="border-t border-gray-100 dark:border-gray-700">
+                    <td className={`px-3 py-2 font-medium ${allReviewed ? "text-gray-700 dark:text-gray-300" : "text-red-600"}`}>
                       {d.proposal.org_name}
                       <span className={`ml-1.5 text-[10px] ${allReviewed ? "text-green-600" : "text-red-400"}`}>{reviewedCount}/{totalSubCriteria}</span>
                     </td>
@@ -628,22 +628,22 @@ export function AnalyticsDashboard() {
       <section>
         <h2 className="text-sm font-bold mb-3">Dimension Correlation Matrix</h2>
         {filtered.length < 3 ? (
-          <div className="border border-gray-200 rounded p-4 text-xs text-gray-400">Requires at least 3 proposals for meaningful correlations.</div>
+          <div className="border border-gray-200 dark:border-gray-700 rounded p-4 text-xs text-gray-400">Requires at least 3 proposals for meaningful correlations.</div>
         ) : (
-          <div className="border border-gray-200 rounded overflow-hidden">
+          <div className="border border-gray-200 dark:border-gray-700 rounded overflow-hidden">
             <table className="w-full text-xs border-collapse">
               <thead>
-                <tr className="bg-gray-50">
-                  <th className="text-left px-3 py-2 font-medium text-gray-600"></th>
-                  {DIM_KEYS.map((dk) => <th key={dk} className="text-center px-2 py-2 font-medium text-gray-600">{DIM_SHORT[dk]}</th>)}
+                <tr className="bg-gray-50 dark:bg-gray-800">
+                  <th className="text-left px-3 py-2 font-medium text-gray-600 dark:text-gray-400"></th>
+                  {DIM_KEYS.map((dk) => <th key={dk} className="text-center px-2 py-2 font-medium text-gray-600 dark:text-gray-400">{DIM_SHORT[dk]}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {DIM_KEYS.map((rowKey) => (
-                  <tr key={rowKey} className="border-t border-gray-100">
-                    <td className="px-3 py-2 font-medium text-gray-700">{DIM_SHORT[rowKey]}</td>
+                  <tr key={rowKey} className="border-t border-gray-100 dark:border-gray-700">
+                    <td className="px-3 py-2 font-medium text-gray-700 dark:text-gray-300">{DIM_SHORT[rowKey]}</td>
                     {DIM_KEYS.map((colKey) => {
-                      if (rowKey === colKey) return <td key={colKey} className="text-center px-2 py-2 bg-gray-50 text-gray-300">1.00</td>;
+                      if (rowKey === colKey) return <td key={colKey} className="text-center px-2 py-2 bg-gray-50 dark:bg-gray-800 text-gray-300">1.00</td>;
                       const r = pearson(dimScoreArrays[rowKey], dimScoreArrays[colKey]);
                       return (
                         <td key={colKey} className="text-center px-2 py-2">
@@ -666,18 +666,18 @@ export function AnalyticsDashboard() {
       <section>
         <h2 className="text-sm font-bold mb-3">Country-Level Patterns</h2>
         {countryPatterns.length <= 1 ? (
-          <div className="border border-gray-200 rounded p-4 text-xs text-gray-400">
+          <div className="border border-gray-200 dark:border-gray-700 rounded p-4 text-xs text-gray-400">
             Cross-country comparison requires proposals from multiple countries.
           </div>
         ) : (
-          <div className="border border-gray-200 rounded overflow-hidden">
+          <div className="border border-gray-200 dark:border-gray-700 rounded overflow-hidden">
             <table className="w-full text-xs border-collapse">
               <thead>
-                <tr className="bg-gray-50">
-                  <th className="text-left px-3 py-2 font-medium text-gray-600 cursor-pointer hover:text-black select-none" onClick={() => toggleSort(countrySort, "country", setCountrySort)}>
+                <tr className="bg-gray-50 dark:bg-gray-800">
+                  <th className="text-left px-3 py-2 font-medium text-gray-600 dark:text-gray-400 cursor-pointer hover:text-black dark:hover:text-white select-none" onClick={() => toggleSort(countrySort, "country", setCountrySort)}>
                     Country{countrySort.key === "country" ? (countrySort.dir === "asc" ? " ↑" : " ↓") : ""}
                   </th>
-                  <th className="text-center px-2 py-2 font-medium text-gray-600 cursor-pointer hover:text-black select-none" onClick={() => toggleSort(countrySort, "n", setCountrySort)}>
+                  <th className="text-center px-2 py-2 font-medium text-gray-600 dark:text-gray-400 cursor-pointer hover:text-black dark:hover:text-white select-none" onClick={() => toggleSort(countrySort, "n", setCountrySort)}>
                     n{countrySort.key === "n" ? (countrySort.dir === "desc" ? " ↓" : " ↑") : ""}
                   </th>
                   {DIM_KEYS.map((dk) => (
@@ -687,9 +687,9 @@ export function AnalyticsDashboard() {
               </thead>
               <tbody>
                 {sortedCountry().map(({ country, count, dims }) => (
-                  <tr key={country} className="border-t border-gray-100">
-                    <td className="px-3 py-2 font-medium text-gray-700">{country}</td>
-                    <td className="text-center px-2 py-2 text-gray-500">{count}</td>
+                  <tr key={country} className="border-t border-gray-100 dark:border-gray-700">
+                    <td className="px-3 py-2 font-medium text-gray-700 dark:text-gray-300">{country}</td>
+                    <td className="text-center px-2 py-2 text-gray-500 dark:text-gray-400">{count}</td>
                     {DIM_KEYS.map((dk) => {
                       const v = dims[dk];
                       return (
