@@ -14,8 +14,9 @@ import { InnovatorFolder } from "@/lib/gdrive";
 import { runBatch, BatchProgress } from "@/lib/batch-runner";
 import { AnalyticsDashboard } from "@/components/analytics-dashboard";
 import { LongitudinalView } from "@/components/longitudinal-view";
+import { CountryView } from "@/components/country-view";
 
-type Tab = "batch" | "review" | "analytics" | "longitudinal";
+type Tab = "batch" | "review" | "analytics" | "longitudinal" | "country";
 
 interface Panelist {
   id: string;
@@ -195,6 +196,12 @@ export default function Home() {
         >
           Longitudinal
         </button>
+        <button
+          onClick={() => { setActiveTab("country"); setSelectedProposalId(null); }}
+          className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "country" ? "border-black dark:border-white text-black dark:text-white" : "border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}
+        >
+          Country
+        </button>
       </div>
 
       {/* Batch tab */}
@@ -304,6 +311,14 @@ export default function Home() {
         <LongitudinalView
           panelistId={currentPanelist?.id || null}
           panelistName={currentPanelist?.name || null}
+          batchId={selectedBatchId}
+          onBatchChange={setSelectedBatchId}
+        />
+      )}
+
+      {/* Country tab */}
+      {activeTab === "country" && (
+        <CountryView
           batchId={selectedBatchId}
           onBatchChange={setSelectedBatchId}
         />
