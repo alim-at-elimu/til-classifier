@@ -14,6 +14,48 @@ export const maxDuration = 300;
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 const MAX_RETRIES = 3;
 
+// Load .env.local manually as a fallback for Next.js env loading issues
+import { readFileSync, existsSync } from "fs";
+import { join, resolve } from "path";
+
+// Eagerly load key at module init — try multiple paths
+function loadAnthropicKey(): string {
+  // 1. Already in env
+  const envKey = process.env.ANTHROPIC_API_KEY?.trim();
+  if (envKey) return envKey;
+
+  // 2. Try reading .env.local from several candidate directories
+  const candidates = [
+    process.cwd(),
+    resolve(process.cwd(), ".."),
+    resolve(process.cwd(), "../.."),
+    // Absolute fallback for this project
+    "C:/Users/ladha/til-classifier",
+  ];
+
+  for (const dir of candidates) {
+    try {
+      const envPath = join(dir, ".env.local");
+      if (!existsSync(envPath)) continue;
+      const content = readFileSync(envPath, "utf-8");
+      const match = content.match(/^ANTHROPIC_API_KEY=(.+)$/m);
+      if (match) {
+        const key = match[1].trim().replace(/\r$/, "");
+        process.env.ANTHROPIC_API_KEY = key;
+        console.log(`[score] Loaded ANTHROPIC_API_KEY from ${envPath}`);
+        return key;
+      }
+    } catch {}
+  }
+  return "";
+}
+
+// Cache at module level so it only runs once
+const ANTHROPIC_KEY = loadAnthropicKey();
+function getAnthropicKey(): string {
+  return ANTHROPIC_KEY || process.env.ANTHROPIC_API_KEY?.trim() || "";
+}
+
 // Anthropic API response types
 interface AnthropicContentBlock {
   type: string;
@@ -51,7 +93,7 @@ async function callClaude(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY || "",
+        "x-api-key": getAnthropicKey(),
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
@@ -118,8 +160,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log("ENV CHECK:", process.env.ANTHROPIC_API_KEY ? "key present" : "key MISSING", "cwd:", process.cwd());
-    if (!process.env.ANTHROPIC_API_KEY) {
+    const apiKey = getAnthropicKey();
+    console.log("ENV CHECK:", apiKey ? "key present" : "key MISSING", "cwd:", process.cwd());
+    if (!apiKey) {
       return NextResponse.json(
         { error: "ANTHROPIC_API_KEY not configured" },
         { status: 500 }
