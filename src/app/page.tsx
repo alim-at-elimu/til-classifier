@@ -13,8 +13,9 @@ import { useGoogleAuth } from "@/lib/google-auth";
 import { InnovatorFolder } from "@/lib/gdrive";
 import { runBatch, BatchProgress } from "@/lib/batch-runner";
 import { AnalyticsDashboard } from "@/components/analytics-dashboard";
+import { LongitudinalView } from "@/components/longitudinal-view";
 
-type Tab = "batch" | "review" | "analytics";
+type Tab = "batch" | "review" | "analytics" | "longitudinal";
 
 interface Panelist {
   id: string;
@@ -85,7 +86,7 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (activeTab === "review" && !currentPanelist) {
+    if ((activeTab === "review" || activeTab === "longitudinal") && !currentPanelist) {
       setShowPanelistModal(true);
     }
   }, [activeTab, currentPanelist]);
@@ -188,6 +189,12 @@ export default function Home() {
         >
           Analytics
         </button>
+        <button
+          onClick={() => { setActiveTab("longitudinal"); setSelectedProposalId(null); }}
+          className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "longitudinal" ? "border-black text-black" : "border-transparent text-gray-400 hover:text-gray-600"}`}
+        >
+          Longitudinal
+        </button>
       </div>
 
       {/* Batch tab */}
@@ -289,6 +296,16 @@ export default function Home() {
           panelistId={currentPanelist?.id || null}
           panelistName={currentPanelist?.name || null}
           onBack={() => setSelectedProposalId(null)}
+        />
+      )}
+
+      {/* Longitudinal tab */}
+      {activeTab === "longitudinal" && !showPanelistModal && (
+        <LongitudinalView
+          panelistId={currentPanelist?.id || null}
+          panelistName={currentPanelist?.name || null}
+          batchId={selectedBatchId}
+          onBatchChange={setSelectedBatchId}
         />
       )}
 

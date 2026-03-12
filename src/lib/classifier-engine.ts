@@ -29,7 +29,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // RUBRIC v3 — single source of truth (unchanged from v3.4.1)
 // ─────────────────────────────────────────────────────────────────────────────
-const RUBRIC = {
+export const RUBRIC = {
   gates: [
     {
       id: "country_theme_fit",

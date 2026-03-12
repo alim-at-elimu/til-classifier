@@ -591,9 +591,17 @@ export function AnalyticsDashboard() {
                 const aiTotal = DIM_KEYS.reduce((s, dk) => s + getDimScaled(d.result, dk, {}), 0);
                 const adj = getAdjustedTotal(d.result, latestOverrides);
                 const totalDiff = adj.total - aiTotal;
+                // Count reviewed sub-criteria (any override/confirm row = reviewed)
+                const totalSubCriteria = Object.values(DIM_DEFS).reduce((s, subs) => s + subs.length, 0);
+                const reviewedKeys = new Set(overrides.filter((o) => o.proposal_id === d.proposal.id).map((o) => o.sub_criterion_key));
+                const reviewedCount = reviewedKeys.size;
+                const allReviewed = reviewedCount >= totalSubCriteria;
                 return (
                   <tr key={d.proposal.id} className="border-t border-gray-100">
-                    <td className="px-3 py-2 font-medium text-gray-700">{d.proposal.org_name}</td>
+                    <td className={`px-3 py-2 font-medium ${allReviewed ? "text-gray-700" : "text-red-600"}`}>
+                      {d.proposal.org_name}
+                      <span className={`ml-1.5 text-[10px] ${allReviewed ? "text-green-600" : "text-red-400"}`}>{reviewedCount}/{totalSubCriteria}</span>
+                    </td>
                     {DIM_KEYS.map((dk) => {
                       const ai = getDimScaled(d.result, dk, {});
                       const adjusted = getDimScaled(d.result, dk, latestOverrides);

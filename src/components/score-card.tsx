@@ -318,6 +318,25 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
     setSaving(false);
   }
 
+  async function confirmSubCriterion(dimKey: string, subKey: string) {
+    const key = `${dimKey}.${subKey}`;
+    if (!panelistId) { alert("Select your name first."); return; }
+    if (isLocked) return;
+    const data = getSubData(dimKey, subKey);
+    const aiScore = data?.score ?? 0;
+
+    setSaving(true);
+    const { data: inserted, error } = await supabase
+      .from("panel_overrides")
+      .insert({ proposal_id: proposalId, panelist_id: panelistId, sub_criterion_key: key, original_score: aiScore, override_score: aiScore, rationale: "" })
+      .select("id, panelist_id, sub_criterion_key, original_score, override_score, rationale, created_at")
+      .single();
+
+    if (error) { alert("Failed to save: " + error.message); setSaving(false); return; }
+    if (inserted) setOverrideHistory((prev) => [...prev, { ...inserted, panelist_name: panelistName || "You" }]);
+    setSaving(false);
+  }
+
   function handleExport() {
     const html = generateExportHTML(proposal, call1, call2, totals, latestOverrides, overrideHistory);
     const safeName = proposal.org_name.replace(/[^a-zA-Z0-9]/g, "_");
@@ -437,6 +456,7 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
                 const hasBorderline = data?.borderline && typeof data.borderline === "string";
                 const hasPanelVerify = data?.panel_verify && typeof data.panel_verify === "string";
                 const history = getHistoryForSub(overrideKey);
+                const isReviewed = history.length > 0;
                 const isEditing = editingSub === overrideKey;
 
                 return (
@@ -466,7 +486,11 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
                           {hasOverride && <span className="text-gray-400 line-through ml-1">{aiScore}</span>}
                           {history.length > 0 && <span className="text-purple-400 text-xs">({history.length})</span>}
                         </div>
-                        <div className="w-16 text-center flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                          {isReviewed && <span className="text-green-600 text-xs font-medium">✓</span>}
+                          {!isLocked && !isReviewed && (
+                            <button onClick={(e) => { e.stopPropagation(); confirmSubCriterion(dimKey, subKey); }} className="text-xs text-green-600 hover:text-green-800 hover:bg-green-50 rounded px-1.5 py-0.5" title="Confirm (no change)">✓</button>
+                          )}
                           {!isLocked && (
                             <button onClick={(e) => { e.stopPropagation(); startEdit(overrideKey); }} className="text-xs text-gray-400 hover:text-black hover:bg-gray-100 rounded px-2 py-0.5">Edit</button>
                           )}
