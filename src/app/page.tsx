@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { GoogleSignIn } from "@/components/google-sign-in";
 import { FolderScanner } from "@/components/folder-scanner";
@@ -8,7 +8,6 @@ import { PreflightTable } from "@/components/preflight-table";
 import { BatchProgressDashboard } from "@/components/batch-progress";
 import { PortfolioTable } from "@/components/portfolio-table";
 import { ScoreCard } from "@/components/score-card";
-import { PanelistPicker } from "@/components/panelist-picker";
 import { useGoogleAuth } from "@/lib/google-auth";
 import { InnovatorFolder } from "@/lib/gdrive";
 import { runBatch, BatchProgress } from "@/lib/batch-runner";
@@ -44,21 +43,7 @@ export default function Home() {
   const tokenRef = useRef(accessToken);
   tokenRef.current = accessToken; // always keep ref in sync with latest token
 
-  useEffect(() => {
-    async function init() {
-      const { error } = await supabase.from("batches").select("count");
-      if (error) setDbStatus(`Error: ${error.message}`);
-      else setDbStatus("Connected");
-
-      const { data } = await supabase.from("panelists").select("id, name").order("name");
-      if (data) setPanelists(data);
-
-      await loadResumableBatches();
-    }
-    init();
-  }, []);
-
-  async function loadResumableBatches() {
+  const loadResumableBatches = useCallback(async () => {
     // Find batches that have proposals not yet scored
     const { data: batches } = await supabase
       .from("batches")
@@ -67,7 +52,7 @@ export default function Home() {
 
     if (!batches) return;
 
-    const resumable: typeof resumableBatches = [];
+    const resumable: { id: string; name: string; total: number; scored: number; errored: number; erroredNames: string[] }[] = [];
     for (const b of batches) {
       const { data: proposals } = await supabase
         .from("proposals")
@@ -84,7 +69,21 @@ export default function Home() {
       }
     }
     setResumableBatches(resumable);
-  }
+  }, []);
+
+  useEffect(() => {
+    async function init() {
+      const { error } = await supabase.from("batches").select("count");
+      if (error) setDbStatus(`Error: ${error.message}`);
+      else setDbStatus("Connected");
+
+      const { data } = await supabase.from("panelists").select("id, name").order("name");
+      if (data) setPanelists(data);
+
+      await loadResumableBatches();
+    }
+    init();
+  }, [loadResumableBatches]);
 
   useEffect(() => {
     if ((activeTab === "review" || activeTab === "longitudinal") && !currentPanelist) {
@@ -116,8 +115,8 @@ export default function Home() {
           setBatchProgress({ ...progress, runLabel: runCount > 1 ? `Run ${run} of ${runCount}` : undefined });
         });
       }
-    } catch (err: any) {
-      console.error("Batch error:", err);
+    } catch (err: unknown) {
+      console.error("Batch error:", err instanceof Error ? err.message : String(err));
     } finally {
       runningRef.current = false;
       setBatchRunning(false);
@@ -133,8 +132,8 @@ export default function Home() {
       await runBatch(selectedResumeBatchId, folders, () => tokenRef.current!, (progress) => {
         setBatchProgress({ ...progress });
       });
-    } catch (err: any) {
-      console.error("Resume batch error:", err);
+    } catch (err: unknown) {
+      console.error("Resume batch error:", err instanceof Error ? err.message : String(err));
     } finally {
       runningRef.current = false;
       setBatchRunning(false);
@@ -255,7 +254,7 @@ export default function Home() {
             <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-950 rounded border border-amber-200 dark:border-amber-800">
               <label className="block text-sm font-medium mb-2 text-amber-800">Resume Incomplete Batch</label>
               <p className="text-xs text-amber-600 mb-3">
-                These batches have proposals that errored or didn't finish scoring. Select one to re-run only the incomplete proposals.
+                These batches have proposals that errored or didn&apos;t finish scoring. Select one to re-run only the incomplete proposals.
               </p>
               <select
                 value={selectedResumeBatchId || ""}

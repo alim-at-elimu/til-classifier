@@ -317,19 +317,44 @@ export const RUBRIC = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RUBRIC SHAPE INTERFACES
+// ─────────────────────────────────────────────────────────────────────────────
+interface RubricAnchor { label: string; text: string; }
+interface RubricGate {
+  id: string;
+  name: string;
+  source: string;
+  anchors: Record<1 | 2 | 3 | 4 | 5, RubricAnchor>;
+}
+interface RubricSub {
+  id: string;
+  name: string;
+  source: string;
+  anchors: Record<1 | 2 | 3 | 4 | 5, RubricAnchor>;
+}
+interface RubricDim {
+  id: string;
+  name: string;
+  call: number;
+  core_question: string;
+  sub: RubricSub[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PROMPT BUILDERS (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
-function buildGateBlock(gate: any): string {
+type AnchorScore = 1 | 2 | 3 | 4 | 5;
+function buildGateBlock(gate: RubricGate): string {
   const lines = [`GATE: ${gate.name.toUpperCase()}\nSource: ${gate.source}`];
-  for (let s = 1; s <= 5; s++) lines.push(`${s} — ${gate.anchors[s].label}: ${gate.anchors[s].text}`);
+  for (let s = 1; s <= 5; s++) lines.push(`${s} — ${gate.anchors[s as AnchorScore].label}: ${gate.anchors[s as AnchorScore].text}`);
   return lines.join("\n");
 }
-function buildSubBlock(sub: any): string {
+function buildSubBlock(sub: RubricSub): string {
   const lines = [`SUB-CRITERION: ${sub.id}`, `Full name: ${sub.name}`, `Source: ${sub.source}`];
-  for (let s = 1; s <= 5; s++) lines.push(`${s} — ${sub.anchors[s].label}: ${sub.anchors[s].text}`);
+  for (let s = 1; s <= 5; s++) lines.push(`${s} — ${sub.anchors[s as AnchorScore].label}: ${sub.anchors[s as AnchorScore].text}`);
   return lines.join("\n");
 }
-function buildDimBlock(dim: any): string {
+function buildDimBlock(dim: RubricDim): string {
   const header = [
     `══════════════════════════════════════════════════════════════`,
     `DIMENSION: ${dim.name.toUpperCase()}`,
@@ -808,7 +833,7 @@ OVERALL SCORE: Set to 0. The system computes the final scaled score.`,
 // ─────────────────────────────────────────────────────────────────────────────
 // JSON PARSING (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
-export function safeParseJSON(raw: string): any {
+export function safeParseJSON(raw: string): Record<string, unknown> | null {
   if (!raw || typeof raw !== "string") return null;
   const attempts = [
     () => JSON.parse(raw.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim()),
@@ -820,7 +845,7 @@ export function safeParseJSON(raw: string): any {
     () => {
       const s = raw.indexOf("{");
       if (s === -1) throw new Error();
-      let frag = raw.slice(s).replace(/```/g, "");
+      const frag = raw.slice(s).replace(/```/g, "");
       let b = 0, br = 0, inS = false, esc = false;
       for (const c of frag) {
         if (esc) { esc = false; continue; }
@@ -860,23 +885,24 @@ export const DIM_MAX: Record<string, number> = {
   evidence_strength: 15,
 };
 
-export function getDimScaled(dimData: any, dimKey: string): number {
+export function getDimScaled(dimData: Record<string, unknown> | null | undefined, dimKey: string): number {
   if (!dimData) return 0;
   const raw = DIM_DEFS[dimKey].reduce((sum, sub) => {
-    return sum + (dimData[sub]?.score || 0);
+    const entry = dimData[sub] as { score?: number } | null | undefined;
+    return sum + (entry?.score || 0);
   }, 0);
   return Math.round((raw / DIM_MAX[dimKey]) * 20);
 }
 
-export function computeTotals(call1: any, call2: any): {
+export function computeTotals(call1: Record<string, unknown> | null | undefined, call2: Record<string, unknown> | null | undefined): {
   dims: Record<string, number | null>;
   total: number;
   rec: string;
   gatesPassed: boolean;
 } | null {
   if (!call1) return null;
-  const d1 = call1.dimensions;
-  const d2 = call2?.dimensions;
+  const d1 = call1.dimensions as Record<string, Record<string, unknown>> | null | undefined;
+  const d2 = (call2?.dimensions) as Record<string, Record<string, unknown>> | null | undefined;
   const dims: Record<string, number | null> = {
     government_depth: getDimScaled(d1?.government_depth, "government_depth"),
     adoption_readiness: getDimScaled(d1?.adoption_readiness, "adoption_readiness"),
@@ -889,26 +915,33 @@ export function computeTotals(call1: any, call2: any): {
   if (total >= 85) rec = "Excellent";
   else if (total >= 75) rec = "Good";
   else if (total >= 60) rec = "Weak";
-  return { dims, total, rec, gatesPassed: call1.all_gates_passed ?? true };
+  return { dims, total, rec, gatesPassed: (call1.all_gates_passed as boolean | undefined) ?? true };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RUBRIC ANCHOR INJECTION (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
-export function injectRubricAnchors(call1: any, call2: any): void {
+export function injectRubricAnchors(call1: Record<string, unknown>, call2: Record<string, unknown>): void {
+  type ScoreEntry = { score?: number; rubric_anchor?: string };
+  type GatesMap = Record<string, ScoreEntry>;
+  type DimsMap = Record<string, Record<string, ScoreEntry>>;
+
+  const c1Gates = (call1 as { gates?: GatesMap }).gates;
   for (const gate of RUBRIC.gates) {
-    const g = call1?.gates?.[gate.id];
-    if (g && g.score >= 1 && g.score <= 5) {
+    const g = c1Gates?.[gate.id];
+    if (g && g.score !== undefined && g.score >= 1 && g.score <= 5) {
       g.rubric_anchor = gate.anchors[g.score as 1|2|3|4|5].text;
     }
   }
+  const c1Dims = (call1 as { dimensions?: DimsMap }).dimensions;
+  const c2Dims = (call2 as { dimensions?: DimsMap }).dimensions;
   for (const dim of RUBRIC.dimensions) {
-    const src = dim.call === 1 ? call1?.dimensions : call2?.dimensions;
+    const src = dim.call === 1 ? c1Dims : c2Dims;
     const dimData = src?.[dim.id];
     if (!dimData) continue;
     for (const sub of dim.sub) {
       const s = dimData[sub.id];
-      if (s && s.score >= 1 && s.score <= 5) {
+      if (s && s.score !== undefined && s.score >= 1 && s.score <= 5) {
         s.rubric_anchor = sub.anchors[s.score as 1|2|3|4|5].text;
       }
     }

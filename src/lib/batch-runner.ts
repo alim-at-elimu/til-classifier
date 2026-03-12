@@ -2,6 +2,13 @@ import { supabase } from "@/lib/supabase";
 import { InnovatorFolder } from "@/lib/gdrive";
 import { downloadPdfAsBase64, extractCostContext } from "@/lib/gdrive-download";
 
+interface ScoreApiResponse {
+  error?: string;
+  call1?: Record<string, unknown> & { applicant?: { name?: string; country?: string; theme?: unknown } };
+  call2?: Record<string, unknown>;
+  totals?: { gatesPassed?: boolean; total?: number; rec?: string };
+}
+
 export interface BatchProgress {
   total: number;
   completed: number;
@@ -55,7 +62,7 @@ export async function runBatch(
       existingResults.map((r) => r.proposal_id)
     );
     for (const p of existingProposals) {
-      existingProposalMap.set(p.gdrive_folder_id, { id: p.id, status: (p as any).status || "" });
+      existingProposalMap.set(p.gdrive_folder_id, { id: p.id, status: p.status || "" });
       if (scoredProposalIds.has(p.id)) {
         scoredFolderIds.add(p.gdrive_folder_id);
       }
@@ -66,7 +73,6 @@ export async function runBatch(
   // PHASE 1: Pre-download all files while token is fresh
   // ──────────────────────────────────────────────
   const toScore: PreDownloaded[] = [];
-  const skipIndices: number[] = [];
 
   for (let i = 0; i < folders.length; i++) {
     const folder = folders[i];
@@ -103,8 +109,8 @@ export async function runBatch(
           : "No annex files were submitted separately.";
 
       toScore.push({ folder, pdfBase64, costContext, annexNote });
-    } catch (err: any) {
-      progress.errors.push({ org: folder.folderName, error: err.message || "Download failed" });
+    } catch (err: unknown) {
+      progress.errors.push({ org: folder.folderName, error: (err instanceof Error ? err.message : String(err)) || "Download failed" });
       progress.completed++;
       onProgress({ ...progress });
     }
@@ -164,7 +170,7 @@ export async function runBatch(
       progress.currentStep = `Scoring (Call 1 + Call 2) — PDF ${pdfSizeMB}MB base64...`;
       onProgress({ ...progress });
 
-      let scoreData: any;
+      let scoreData: ScoreApiResponse = {};
       const MAX_RETRIES = 5;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         const scoreRes = await fetch("/api/score", {
@@ -182,8 +188,8 @@ export async function runBatch(
 
         const rawText = await scoreRes.text();
         try {
-          scoreData = JSON.parse(rawText);
-        } catch (parseErr) {
+          scoreData = JSON.parse(rawText) as ScoreApiResponse;
+        } catch {
           // Capture what we actually got back for debugging
           const preview = rawText.slice(0, 200);
           const sizeKB = Math.round(rawText.length / 1024);
@@ -249,10 +255,10 @@ export async function runBatch(
       progress.completed++;
       progress.currentStep = "";
       onProgress({ ...progress });
-    } catch (err: any) {
+    } catch (err: unknown) {
       progress.errors.push({
         org: folder.folderName,
-        error: err.message || "Unknown error",
+        error: (err instanceof Error ? err.message : String(err)) || "Unknown error",
       });
       progress.completed++;
       progress.currentStep = "";
@@ -269,7 +275,7 @@ export async function runBatch(
       if (errProposal) {
         await supabase
           .from("proposals")
-          .update({ status: "error" as any })
+          .update({ status: "error" })
           .eq("id", errProposal.id);
       }
     }

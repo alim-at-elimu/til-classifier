@@ -32,6 +32,11 @@ const THEME_SHORT: Record<string, string> = {
 // ── Types ──
 interface BatchOption { id: string; name: string; created_at: string; }
 
+type SubCriterionScore = { score?: number };
+type DimScores = Record<string, Record<string, SubCriterionScore>>;
+type CallJson = { dimensions?: DimScores } & Record<string, unknown>;
+
+
 interface InnovatorData {
   proposalId: string;
   orgName: string;
@@ -55,7 +60,7 @@ interface CountryViewProps {
 }
 
 // ── Helpers ──
-function getDimRaw(call1: any, call2: any, dimKey: string, overrides: Record<string, number>): number {
+function getDimRaw(call1: CallJson, call2: CallJson, dimKey: string, overrides: Record<string, number>): number {
   const subs = DIM_DEFS[dimKey];
   const src = (dimKey === "innovation_quality" || dimKey === "evidence_strength")
     ? call2?.dimensions : call1?.dimensions;
@@ -67,13 +72,13 @@ function getDimRaw(call1: any, call2: any, dimKey: string, overrides: Record<str
   return total;
 }
 
-function getDimScaled(call1: any, call2: any, dimKey: string, overrides: Record<string, number>): number {
+function getDimScaled(call1: CallJson, call2: CallJson, dimKey: string, overrides: Record<string, number>): number {
   const raw = getDimRaw(call1, call2, dimKey, overrides);
   // Scale every dimension to /20, so 5 dims × 20 = 100 max total
   return Math.round((raw / DIM_MAX[dimKey]) * 20);
 }
 
-function computeAdjustedTotal(call1: any, call2: any, overrides: Record<string, number>): number {
+function computeAdjustedTotal(call1: CallJson, call2: CallJson, overrides: Record<string, number>): number {
   let total = 0;
   for (const dimKey of Object.keys(DIM_DEFS)) {
     total += getDimScaled(call1, call2, dimKey, overrides);
@@ -176,6 +181,15 @@ ${rows}
 </body></html>`;
 }
 
+interface ClassifierResultRow {
+  proposal_id: string;
+  call1_json: CallJson;
+  call2_json: CallJson;
+  gates_passed: boolean | null;
+  raw_total: number | null;
+  recommendation: string | null;
+}
+
 // ── Component ──
 export function CountryView({ batchId, onBatchChange }: CountryViewProps) {
   const [batches, setBatches] = useState<BatchOption[]>([]);
@@ -192,96 +206,94 @@ export function CountryView({ batchId, onBatchChange }: CountryViewProps) {
       }
     }
     loadBatches();
-  }, []);
+  }, [batchId, onBatchChange]);
 
   // Load data when batch changes
   useEffect(() => {
-    if (batchId) loadData();
-    else setGroups([]);
-  }, [batchId]);
+    async function loadData() {
+      if (!batchId) { setGroups([]); return; }
+      setLoading(true);
 
-  async function loadData() {
-    if (!batchId) return;
-    setLoading(true);
+      // Fetch proposals for this batch
+      const { data: proposals } = await supabase
+        .from("proposals")
+        .select("id, org_name, country, theme, status")
+        .eq("batch_id", batchId)
+        .in("status", ["scored", "in_review", "finalized"]);
 
-    // Fetch proposals for this batch
-    const { data: proposals } = await supabase
-      .from("proposals")
-      .select("id, org_name, country, theme, status")
-      .eq("batch_id", batchId)
-      .in("status", ["scored", "in_review", "finalized"]);
+      if (!proposals || proposals.length === 0) { setGroups([]); setLoading(false); return; }
 
-    if (!proposals || proposals.length === 0) { setGroups([]); setLoading(false); return; }
+      const proposalIds = proposals.map((p) => p.id);
 
-    const proposalIds = proposals.map((p) => p.id);
+      // Fetch results and overrides in parallel
+      const [crRes, ovRes] = await Promise.all([
+        supabase.from("classifier_results")
+          .select("proposal_id, call1_json, call2_json, gates_passed, raw_total, recommendation")
+          .in("proposal_id", proposalIds),
+        supabase.from("panel_overrides")
+          .select("proposal_id, sub_criterion_key, original_score, override_score, created_at")
+          .in("proposal_id", proposalIds)
+          .order("created_at", { ascending: true }),
+      ]);
 
-    // Fetch results and overrides in parallel
-    const [crRes, ovRes] = await Promise.all([
-      supabase.from("classifier_results")
-        .select("proposal_id, call1_json, call2_json, gates_passed, raw_total, recommendation")
-        .in("proposal_id", proposalIds),
-      supabase.from("panel_overrides")
-        .select("proposal_id, sub_criterion_key, original_score, override_score, created_at")
-        .in("proposal_id", proposalIds)
-        .order("created_at", { ascending: true }),
-    ]);
+      const resultMap = new Map((crRes.data as ClassifierResultRow[] || []).map((r) => [r.proposal_id, r]));
 
-    const resultMap = new Map((crRes.data || []).map((r: any) => [r.proposal_id, r]));
-
-    // Build latest overrides per proposal
-    const overrideMap = new Map<string, Record<string, number>>();
-    for (const o of (ovRes.data || [])) {
-      const map = overrideMap.get(o.proposal_id) || {};
-      map[o.sub_criterion_key] = o.override_score;
-      overrideMap.set(o.proposal_id, map);
-    }
-
-    // Build innovator data
-    const innovators: InnovatorData[] = [];
-    for (const p of proposals) {
-      const cr = resultMap.get(p.id);
-      if (!cr) continue;
-      const overrides = overrideMap.get(p.id) || {};
-      const adjustedTotal = computeAdjustedTotal(cr.call1_json, cr.call2_json, overrides);
-      const band = bandForTotal(adjustedTotal);
-
-      const dimScores: Record<string, number> = {};
-      for (const dimKey of Object.keys(DIM_DEFS)) {
-        dimScores[dimKey] = getDimScaled(cr.call1_json, cr.call2_json, dimKey, overrides);
+      // Build latest overrides per proposal
+      const overrideMap = new Map<string, Record<string, number>>();
+      for (const o of (ovRes.data || [])) {
+        const map = overrideMap.get(o.proposal_id) || {};
+        map[o.sub_criterion_key] = o.override_score;
+        overrideMap.set(o.proposal_id, map);
       }
 
-      innovators.push({
-        proposalId: p.id,
-        orgName: p.org_name || "Unknown",
-        country: p.country || "Unknown",
-        themes: Array.isArray(p.theme) ? p.theme : (p.theme ? [p.theme] : []),
-        adjustedTotal,
-        band,
-        gatesPassed: cr.gates_passed ?? false,
-        dimScores,
-      });
-    }
+      // Build innovator data
+      const innovators: InnovatorData[] = [];
+      for (const p of proposals) {
+        const cr = resultMap.get(p.id);
+        if (!cr) continue;
+        const overrides = overrideMap.get(p.id) || {};
+        const adjustedTotal = computeAdjustedTotal(cr.call1_json, cr.call2_json, overrides);
+        const band = bandForTotal(adjustedTotal);
 
-    // Group by country
-    const countryMap = new Map<string, InnovatorData[]>();
-    for (const inv of innovators) {
-      const arr = countryMap.get(inv.country) || [];
-      arr.push(inv);
-      countryMap.set(inv.country, arr);
-    }
+        const dimScores: Record<string, number> = {};
+        for (const dimKey of Object.keys(DIM_DEFS)) {
+          dimScores[dimKey] = getDimScaled(cr.call1_json, cr.call2_json, dimKey, overrides);
+        }
 
-    // Sort innovators within each country by score desc, then sort countries alphabetically
-    const newGroups: CountryGroup[] = [];
-    for (const [country, invs] of countryMap.entries()) {
-      invs.sort((a, b) => b.adjustedTotal - a.adjustedTotal);
-      const avg = Math.round(invs.reduce((s, i) => s + i.adjustedTotal, 0) / invs.length);
-      newGroups.push({ country, innovators: invs, avgScore: avg });
-    }
-    newGroups.sort((a, b) => a.country.localeCompare(b.country));
+        innovators.push({
+          proposalId: p.id,
+          orgName: p.org_name || "Unknown",
+          country: p.country || "Unknown",
+          themes: Array.isArray(p.theme) ? p.theme : (p.theme ? [p.theme] : []),
+          adjustedTotal,
+          band,
+          gatesPassed: cr.gates_passed ?? false,
+          dimScores,
+        });
+      }
 
-    setGroups(newGroups);
-    setLoading(false);
-  }
+      // Group by country
+      const countryMap = new Map<string, InnovatorData[]>();
+      for (const inv of innovators) {
+        const arr = countryMap.get(inv.country) || [];
+        arr.push(inv);
+        countryMap.set(inv.country, arr);
+      }
+
+      // Sort innovators within each country by score desc, then sort countries alphabetically
+      const newGroups: CountryGroup[] = [];
+      for (const [country, invs] of countryMap.entries()) {
+        invs.sort((a, b) => b.adjustedTotal - a.adjustedTotal);
+        const avg = Math.round(invs.reduce((s, i) => s + i.adjustedTotal, 0) / invs.length);
+        newGroups.push({ country, innovators: invs, avgScore: avg });
+      }
+      newGroups.sort((a, b) => a.country.localeCompare(b.country));
+
+      setGroups(newGroups);
+      setLoading(false);
+    }
+    loadData();
+  }, [batchId]);
 
   const batchName = batches.find((b) => b.id === batchId)?.name || "Batch";
 

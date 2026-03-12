@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 // ── Shared constants for export ──
@@ -94,6 +94,85 @@ interface BatchOption {
   created_at: string;
 }
 
+// ── Typing for classifier JSON blobs ──
+type DimData = Record<string, { score?: number; interpretation?: string; extract?: string; rubric_anchor?: string }> | undefined;
+
+interface GateEntry {
+  pass?: boolean;
+  score: number;
+  interpretation?: string;
+}
+
+interface CallJson {
+  gates?: Record<string, GateEntry>;
+  dimensions?: {
+    government_depth?: DimData;
+    adoption_readiness?: DimData;
+    cost_realism?: DimData;
+    innovation_quality?: DimData;
+    evidence_strength?: DimData;
+    [key: string]: DimData;
+  };
+  pilot_financials?: {
+    cost_til?: number | null;
+    cost_applicant?: number | null;
+    cost_government_inkind?: number | null;
+    total_teachers?: number | null;
+  };
+  consistency_notes?: string[];
+  recommendation?: string;
+  summary?: string;
+}
+
+interface OverrideHistoryEntry {
+  proposal_id: string;
+  sub_criterion_key: string;
+  original_score: number;
+  override_score: number;
+  rationale: string;
+  created_at: string;
+  panelist_name: string;
+}
+
+interface ClassifierResultRow {
+  proposal_id: string;
+  call1_json: CallJson;
+  call2_json: CallJson;
+}
+
+interface RawProposalRow {
+  id: string;
+  org_name: string | null;
+  country: string | null;
+  theme: string | string[] | null;
+  status: string;
+  lead_reviewer_id: string | null;
+  finalized_by: string | null;
+  classifier_results: {
+    raw_total: number | null;
+    recommendation: string | null;
+    gates_passed: boolean | null;
+    call1_json: CallJson;
+  } | {
+    raw_total: number | null;
+    recommendation: string | null;
+    gates_passed: boolean | null;
+    call1_json: CallJson;
+  }[] | null;
+}
+
+interface TotalsResult {
+  dims: Record<string, number>;
+  total: number;
+  rec: string;
+}
+
+interface ExportProposal {
+  org_name: string;
+  country: string;
+  theme: string | string[];
+}
+
 interface PortfolioTableProps {
   onSelectProposal: (id: string) => void;
   panelistId: string | null;
@@ -103,7 +182,7 @@ interface PortfolioTableProps {
 }
 
 // ── Export helpers ──
-function getDimScaled(dimData: any, dimKey: string, overrides: Record<string, number>): number {
+function getDimScaled(dimData: DimData, dimKey: string, overrides: Record<string, number>): number {
   if (!dimData) return 0;
   const raw = DIM_DEFS[dimKey].reduce((sum, sub) => {
     const key = `${dimKey}.${sub}`;
@@ -112,7 +191,7 @@ function getDimScaled(dimData: any, dimKey: string, overrides: Record<string, nu
   return Math.round((raw / DIM_MAX[dimKey]) * 20);
 }
 
-function computeTotals(call1: any, call2: any, overrides: Record<string, number>) {
+function computeTotals(call1: CallJson | null | undefined, call2: CallJson | null | undefined, overrides: Record<string, number>): TotalsResult {
   if (!call1) return { dims: {} as Record<string, number>, total: 0, rec: "Fail" };
   const d1 = call1.dimensions;
   const d2 = call2?.dimensions;
@@ -131,13 +210,13 @@ function computeTotals(call1: any, call2: any, overrides: Record<string, number>
   return { dims, total, rec };
 }
 
-function generateExportHTML(proposal: any, call1: any, call2: any, totals: any, latestOverrides: Record<string, number>, overrideHistory: any[]) {
+function generateExportHTML(proposal: ExportProposal, call1: CallJson, call2: CallJson | null | undefined, totals: TotalsResult, latestOverrides: Record<string, number>, overrideHistory: OverrideHistoryEntry[]) {
   const gates = call1.gates || {};
   const consistencyNotes: string[] = call2?.consistency_notes || [];
   const recommendation: string = call2?.recommendation || "";
   const summary: string = call2?.summary || "";
 
-  function getSubData(dimKey: string, subKey: string): any {
+  function getSubData(dimKey: string, subKey: string): { score?: number; interpretation?: string; extract?: string; rubric_anchor?: string } | null {
     const src = dimKey === "innovation_quality" || dimKey === "evidence_strength" ? call2?.dimensions : call1?.dimensions;
     return src?.[dimKey]?.[subKey] || null;
   }
@@ -171,7 +250,7 @@ function generateExportHTML(proposal: any, call1: any, call2: any, totals: any, 
       const key = `${dimKey}.${subKey}`;
       const currentScore = latestOverrides[key] ?? aiScore;
       const hasOverride = latestOverrides[key] !== undefined;
-      const history = overrideHistory.filter((o: any) => o.sub_criterion_key === key);
+      const history = overrideHistory.filter((o) => o.sub_criterion_key === key);
 
       let detail = "";
       if (data?.interpretation) detail += `<div style="font-size:10px;color:#6b7280;margin:2px 0"><b>Interpretation:</b> ${data.interpretation}</div>`;
@@ -180,7 +259,7 @@ function generateExportHTML(proposal: any, call1: any, call2: any, totals: any, 
 
       let overrideHTML = "";
       if (history.length > 0) {
-        overrideHTML = history.map((h: any) =>
+        overrideHTML = history.map((h) =>
           `<div style="font-size:10px;color:#7c3aed;margin:2px 0">Override: ${h.original_score} → ${h.override_score} by ${h.panelist_name}: ${h.rationale}</div>`
         ).join("");
       }
@@ -244,6 +323,24 @@ function generateExportHTML(proposal: any, call1: any, call2: any, totals: any, 
 </body></html>`;
 }
 
+function SortHeader({ label, sortKeyName, activeSortKey, sortDir, onSort }: {
+  label: string;
+  sortKeyName: SortKey;
+  activeSortKey: SortKey;
+  sortDir: SortDir;
+  onSort: (key: SortKey) => void;
+}) {
+  const active = activeSortKey === sortKeyName;
+  return (
+    <th
+      className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-black dark:hover:text-white select-none"
+      onClick={() => onSort(sortKeyName)}
+    >
+      {label} {active ? (sortDir === "asc" ? "↑" : "↓") : ""}
+    </th>
+  );
+}
+
 function downloadHTML(html: string, filename: string) {
   const blob = new Blob([html], { type: "text/html" });
   const url = URL.createObjectURL(blob);
@@ -267,28 +364,7 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
   const [exporting, setExporting] = useState(false);
   const [filterTheme, setFilterTheme] = useState<string | null>(null);
 
-  // Load batches on mount
-  useEffect(() => {
-    async function loadBatches() {
-      const { data } = await supabase
-        .from("batches")
-        .select("id, name, created_at")
-        .order("created_at", { ascending: false });
-      if (data) {
-        setBatches(data);
-        // Auto-select the most recent batch if none selected
-        if (!batchId && data.length > 0) {
-          onBatchChange(data[0].id);
-        }
-      }
-    }
-    loadBatches();
-  }, []);
-
-  // Reload proposals when batchId changes
-  useEffect(() => { if (batchId) loadData(); }, [batchId]);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     let query = supabase
       .from("proposals")
       .select("id, org_name, country, theme, status, lead_reviewer_id, finalized_by, classifier_results(raw_total, recommendation, gates_passed, call1_json)")
@@ -307,7 +383,7 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
 
     if (propRes.data) {
       // Fetch override counts for review progress
-      const proposalIds = propRes.data.map((p: any) => p.id);
+      const proposalIds = (propRes.data as RawProposalRow[]).map((p) => p.id);
       const { data: overrides } = await supabase
         .from("panel_overrides")
         .select("proposal_id, sub_criterion_key")
@@ -321,7 +397,7 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
         reviewedMap.set(o.proposal_id, set);
       }
 
-      const rows: ProposalRow[] = propRes.data.map((p: any) => {
+      const rows: ProposalRow[] = (propRes.data as RawProposalRow[]).map((p) => {
         const cr = Array.isArray(p.classifier_results) ? p.classifier_results[0] : p.classifier_results;
         const pf = cr?.call1_json?.pilot_financials;
         let totalCost: number | null = null;
@@ -346,7 +422,31 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
       setProposals(rows);
     }
     setLoading(false);
-  }
+  }, [batchId]);
+
+  // Load batches on mount
+  useEffect(() => {
+    async function loadBatches() {
+      const { data } = await supabase
+        .from("batches")
+        .select("id, name, created_at")
+        .order("created_at", { ascending: false });
+      if (data) {
+        setBatches(data);
+        // Auto-select the most recent batch if none selected
+        if (!batchId && data.length > 0) {
+          onBatchChange(data[0].id);
+        }
+      }
+    }
+    loadBatches();
+  }, [batchId, onBatchChange]);
+
+  // Reload proposals when batchId changes
+  useEffect(() => {
+    if (!batchId) return;
+    void (async () => { await loadData(); })();
+  }, [batchId, loadData]);
 
   function handleSort(key: SortKey) {
     if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -407,11 +507,11 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
         supabase.from("panel_overrides").select("proposal_id, sub_criterion_key, original_score, override_score, rationale, created_at, panelists(name)").in("proposal_id", ids).order("created_at", { ascending: true }),
       ]);
 
-      const resultMap = new Map((crRes.data || []).map((r: any) => [r.proposal_id, r]));
-      const overrideMap = new Map<string, any[]>();
+      const resultMap = new Map((crRes.data || []).map((r: ClassifierResultRow) => [r.proposal_id, r]));
+      const overrideMap = new Map<string, OverrideHistoryEntry[]>();
       for (const o of (ovRes.data || [])) {
         const arr = overrideMap.get(o.proposal_id) || [];
-        arr.push({ ...o, panelist_name: (o as any).panelists?.name || "Unknown" });
+        arr.push({ ...o, panelist_name: (o.panelists as { name?: string } | null)?.name || "Unknown" });
         overrideMap.set(o.proposal_id, arr);
       }
 
@@ -433,18 +533,6 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
       console.error("Export error:", err);
     }
     setExporting(false);
-  }
-
-  function SortHeader({ label, sortKeyName }: { label: string; sortKeyName: SortKey }) {
-    const active = sortKey === sortKeyName;
-    return (
-      <th
-        className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-black dark:hover:text-white select-none"
-        onClick={() => handleSort(sortKeyName)}
-      >
-        {label} {active ? (sortDir === "asc" ? "↑" : "↓") : ""}
-      </th>
-    );
   }
 
   if (loading) return <div className="text-sm text-gray-500 dark:text-gray-400">Loading proposals...</div>;
@@ -513,12 +601,12 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
          <table className="w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-800">
             <tr>
-              <SortHeader label="Organisation" sortKeyName="org_name" />
-              <SortHeader label="Country" sortKeyName="country" />
-              <SortHeader label="Theme" sortKeyName="theme" />
-              <SortHeader label="Gates" sortKeyName="gates_passed" />
-              <SortHeader label="Score" sortKeyName="raw_total" />
-              <SortHeader label="Band" sortKeyName="recommendation" />
+              <SortHeader label="Organisation" sortKeyName="org_name" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortHeader label="Country" sortKeyName="country" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortHeader label="Theme" sortKeyName="theme" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortHeader label="Gates" sortKeyName="gates_passed" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortHeader label="Score" sortKeyName="raw_total" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortHeader label="Band" sortKeyName="recommendation" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total(K)</th>
               <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">$/Tchr</th>
               <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Reviewed</th>

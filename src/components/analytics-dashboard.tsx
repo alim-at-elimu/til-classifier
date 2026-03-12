@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 // ── Dimension/sub-criterion definitions ──
@@ -77,18 +77,20 @@ const BAND_COLORS: Record<string, string> = {
 
 // ── Types ──
 interface ProposalRow { id: string; org_name: string; country: string; theme: string | string[]; }
-interface ResultRow { proposal_id: string; call1_json: any; call2_json: any; gates_passed: boolean; raw_total: number; recommendation: string; }
+interface ResultRow { proposal_id: string; call1_json: Record<string, unknown>; call2_json: Record<string, unknown>; gates_passed: boolean; raw_total: number; recommendation: string; }
 interface OverrideRow { proposal_id: string; sub_criterion_key: string; original_score: number; override_score: number; created_at: string; }
 interface Enriched { proposal: ProposalRow; result: ResultRow; }
 
 // ── Helpers ──
 function getSubScore(result: ResultRow, dimKey: string, subKey: string): number | null {
   const call = dimKey === "innovation_quality" || dimKey === "evidence_strength" ? "call2_json" : "call1_json";
-  return result[call]?.dimensions?.[dimKey]?.[subKey]?.score ?? null;
+  const json = result[call] as { dimensions?: Record<string, Record<string, { score?: number }>> } | null | undefined;
+  return json?.dimensions?.[dimKey]?.[subKey]?.score ?? null;
 }
 
 function getGate(result: ResultRow, gateKey: string): { pass: boolean; score: number } | null {
-  return result.call1_json?.gates?.[gateKey] ?? null;
+  const gates = (result.call1_json as { gates?: Record<string, { pass: boolean; score: number }> } | null | undefined)?.gates;
+  return gates?.[gateKey] ?? null;
 }
 
 function scoreColor(score: number): string {

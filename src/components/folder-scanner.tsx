@@ -27,8 +27,8 @@ export function FolderScanner({ onScanComplete }: FolderScannerProps) {
       } else {
         onScanComplete(results, folderId.trim());
       }
-    } catch (err: any) {
-      setError(err.message || "Scan failed");
+    } catch (err: unknown) {
+      setError((err instanceof Error ? err.message : String(err)) || "Scan failed");
     } finally {
       setScanning(false);
     }

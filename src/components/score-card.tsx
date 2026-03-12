@@ -55,7 +55,7 @@ const SCORE_TEXT: Record<number, string> = { 1: "text-white", 2: "text-white", 3
 const BAND_STYLE: Record<string, string> = { Excellent: "bg-green-600 text-white", Good: "bg-blue-600 text-white", Weak: "bg-amber-500 text-white", Fail: "bg-red-600 text-white" };
 
 // ── Scoring math ──
-function getDimScaled(dimData: any, dimKey: string, latestOverrides: Record<string, number>): number {
+function getDimScaled(dimData: DimData | undefined | null, dimKey: string, latestOverrides: Record<string, number>): number {
   if (!dimData) return 0;
   const raw = DIM_DEFS[dimKey].reduce((sum, sub) => {
     const key = `${dimKey}.${sub}`;
@@ -64,7 +64,7 @@ function getDimScaled(dimData: any, dimKey: string, latestOverrides: Record<stri
   return Math.round((raw / DIM_MAX[dimKey]) * 20);
 }
 
-function computeTotals(call1: any, call2: any, latestOverrides: Record<string, number>) {
+function computeTotals(call1: CallJson | null, call2: CallJson | null, latestOverrides: Record<string, number>) {
   if (!call1) return { dims: {} as Record<string, number>, total: 0, rec: "Fail" };
   const d1 = call1.dimensions;
   const d2 = call2?.dimensions;
@@ -84,13 +84,13 @@ function computeTotals(call1: any, call2: any, latestOverrides: Record<string, n
 }
 
 // ── Export HTML ──
-function generateExportHTML(proposal: any, call1: any, call2: any, totals: any, latestOverrides: Record<string, number>, overrideHistory: OverrideRecord[]) {
+function generateExportHTML(proposal: ProposalData, call1: CallJson, call2: CallJson | null, totals: { dims: Record<string, number>; total: number; rec: string }, latestOverrides: Record<string, number>, overrideHistory: OverrideRecord[]) {
   const gates = call1.gates || {};
   const consistencyNotes: string[] = call2?.consistency_notes || [];
   const recommendation: string = call2?.recommendation || "";
   const summary: string = call2?.summary || "";
 
-  function getSubData(dimKey: string, subKey: string): any {
+  function getSubData(dimKey: string, subKey: string): SubData | null {
     const src = dimKey === "innovation_quality" || dimKey === "evidence_strength" ? call2?.dimensions : call1?.dimensions;
     return src?.[dimKey]?.[subKey] || null;
   }
@@ -211,6 +211,54 @@ function downloadHTML(html: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+// ── AI response types ──
+type DimData = Record<string, { score?: number; interpretation?: string; extract?: string; rubric_anchor?: string; borderline?: string; borderline_rubric_low?: string; borderline_rubric_high?: string; panel_verify?: string }>;
+
+interface GateEntry {
+  pass?: boolean;
+  score: number;
+  extract?: string;
+  interpretation?: string;
+  rubric_anchor?: string;
+}
+
+interface CallJson {
+  dimensions?: Record<string, DimData>;
+  gates?: Record<string, GateEntry>;
+  all_gates_passed?: boolean;
+  consistency_notes?: string[];
+  recommendation?: string;
+  summary?: string;
+  pilot_financials?: {
+    cost_til?: number | null;
+    cost_applicant?: number | null;
+    cost_government_inkind?: number | null;
+    total_teachers?: number | null;
+    pilot_start?: string | null;
+    pilot_end?: string | null;
+    notes?: string;
+  };
+}
+
+interface SubData {
+  score?: number;
+  interpretation?: string;
+  extract?: string;
+  rubric_anchor?: string;
+  borderline?: string;
+  borderline_rubric_low?: string;
+  borderline_rubric_high?: string;
+  panel_verify?: string;
+}
+
+interface ProposalData {
+  id: string;
+  org_name: string;
+  country: string;
+  theme: string | string[];
+  status: string;
+}
+
 // ── Types ──
 interface OverrideRecord {
   id: string;
@@ -232,9 +280,9 @@ interface ScoreCardProps {
 
 export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: ScoreCardProps) {
   const [loading, setLoading] = useState(true);
-  const [proposal, setProposal] = useState<any>(null);
-  const [call1, setCall1] = useState<any>(null);
-  const [call2, setCall2] = useState<any>(null);
+  const [proposal, setProposal] = useState<ProposalData | null>(null);
+  const [call1, setCall1] = useState<CallJson | null>(null);
+  const [call2, setCall2] = useState<CallJson | null>(null);
   const [expandedSub, setExpandedSub] = useState<string | null>(null);
   const [expandedGate, setExpandedGate] = useState<string | null>(null);
   const [overrideHistory, setOverrideHistory] = useState<OverrideRecord[]>([]);
@@ -253,7 +301,11 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
       if (propRes.data) setProposal(propRes.data);
       if (crRes.data) { setCall1(crRes.data.call1_json); setCall2(crRes.data.call2_json); }
       if (ovRes.data) {
-        setOverrideHistory(ovRes.data.map((o: any) => ({ ...o, panelist_name: o.panelists?.name || "Unknown" })));
+        type RawOverride = { id: string; panelist_id: string; sub_criterion_key: string; original_score: number; override_score: number; rationale: string; created_at: string; panelists: { name?: string }[] | { name?: string } | null };
+        setOverrideHistory((ovRes.data as RawOverride[]).map((o) => {
+          const panelist_name = Array.isArray(o.panelists) ? o.panelists[0]?.name || "Unknown" : o.panelists?.name || "Unknown";
+          return { ...o, panelist_name };
+        }));
       }
       setLoading(false);
     }
@@ -276,7 +328,7 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
   const totals = computeTotals(call1, call2, latestOverrides);
   const bandClass = BAND_STYLE[totals.rec] || "bg-gray-500 text-white";
 
-  function getSubData(dimKey: string, subKey: string): any {
+  function getSubData(dimKey: string, subKey: string): SubData | null {
     const src = dimKey === "innovation_quality" || dimKey === "evidence_strength" ? call2?.dimensions : call1?.dimensions;
     return src?.[dimKey]?.[subKey] || null;
   }
@@ -338,6 +390,7 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
   }
 
   function handleExport() {
+    if (!proposal || !call1) return;
     const html = generateExportHTML(proposal, call1, call2, totals, latestOverrides, overrideHistory);
     const safeName = proposal.org_name.replace(/[^a-zA-Z0-9]/g, "_");
     downloadHTML(html, `TIL_Assessment_${safeName}.html`);
@@ -414,11 +467,11 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
         const totalCost = costTil + costApp + costGov;
         const teachers = pf.total_teachers ?? 0;
         const costPerTeacher = teachers > 0 ? Math.round(totalCost / teachers) : null;
-        const fmtDate = (d: string | null) => {
+        const fmtDate = (d: string | null | undefined) => {
           if (!d) return "—";
           try { return new Date(d).toLocaleDateString("en-US", { month: "short", year: "numeric" }); } catch { return d; }
         };
-        const fmtUSD = (n: number | null) => n != null ? `$${n.toLocaleString()}` : "—";
+        const fmtUSD = (n: number | null | undefined) => n != null ? `$${n.toLocaleString()}` : "—";
         return (
           <div className="mb-4 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2.5">
             <h3 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Pilot Financials</h3>
@@ -480,7 +533,7 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
                 </button>
                 {isExp && (
                   <div className="px-2.5 py-2 bg-white dark:bg-gray-900 space-y-1 border-t border-gray-100 dark:border-gray-700">
-                    {gate.extract && <div className="text-xs"><span className="font-semibold text-gray-600 dark:text-gray-400">Extract: </span><span className="italic text-gray-500 dark:text-gray-400">"{gate.extract}"</span></div>}
+                    {gate.extract && <div className="text-xs"><span className="font-semibold text-gray-600 dark:text-gray-400">Extract: </span><span className="italic text-gray-500 dark:text-gray-400">&ldquo;{gate.extract}&rdquo;</span></div>}
                     {gate.interpretation && <div className="text-xs"><span className="font-semibold text-gray-600 dark:text-gray-400">Interpretation: </span><span className="text-gray-500 dark:text-gray-400">{gate.interpretation}</span></div>}
                     {gate.rubric_anchor && <div className="text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 mt-0.5"><span className="font-semibold text-gray-600 dark:text-gray-400">Rubric ({gate.score}): </span><span className="text-gray-500 dark:text-gray-400">{gate.rubric_anchor}</span></div>}
                   </div>
@@ -560,7 +613,7 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
 
                       {isExp && data && (
                         <div className={`bg-slate-50 dark:bg-gray-800 border-l-4 border-blue-400 px-3 py-2.5 space-y-2 ${isLast ? "border-b border-gray-100 dark:border-gray-700" : ""}`}>
-                          {data.extract && <div className="text-xs leading-relaxed"><span className="font-semibold text-gray-600 dark:text-gray-400">Extract: </span><span className="italic text-gray-500 dark:text-gray-400">"{data.extract}"</span></div>}
+                          {data.extract && <div className="text-xs leading-relaxed"><span className="font-semibold text-gray-600 dark:text-gray-400">Extract: </span><span className="italic text-gray-500 dark:text-gray-400">&ldquo;{data.extract}&rdquo;</span></div>}
                           {data.interpretation && <div className="text-xs leading-relaxed"><span className="font-semibold text-gray-600 dark:text-gray-400">Interpretation: </span><span className="text-gray-500 dark:text-gray-400">{data.interpretation}</span></div>}
                           {data.rubric_anchor && (
                             <div className="rounded bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-2.5 py-1.5">

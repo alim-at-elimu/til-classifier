@@ -77,18 +77,21 @@ interface LongitudinalViewProps {
 }
 
 // ── Rubric lookup ──
-function getRubricAnchors(key: string): { name: string; source: string; anchors: Record<number, { label: string; text: string }> } | null {
+interface RubricAnchorMap { [level: number]: { label: string; text: string } }
+interface RubricEntry { name: string; source: string; anchors: RubricAnchorMap }
+
+function getRubricAnchors(key: string): RubricEntry | null {
   // Check gates first
-  const gate = RUBRIC.gates.find((g: any) => g.id === key);
-  if (gate) return { name: gate.name, source: gate.source, anchors: gate.anchors as any };
+  const gate = RUBRIC.gates.find((g) => g.id === key);
+  if (gate) return { name: gate.name, source: gate.source, anchors: gate.anchors as RubricAnchorMap };
 
   // Check dimensions
   const [dimKey, subKey] = key.split(".");
-  const dim = RUBRIC.dimensions.find((d: any) => d.id === dimKey);
+  const dim = RUBRIC.dimensions.find((d) => d.id === dimKey);
   if (!dim) return null;
-  const sub = dim.sub.find((s: any) => s.id === subKey);
+  const sub = dim.sub.find((s) => s.id === subKey);
   if (!sub) return null;
-  return { name: sub.name, source: sub.source, anchors: sub.anchors as any };
+  return { name: sub.name, source: sub.source, anchors: sub.anchors as RubricAnchorMap };
 }
 
 // Build dropdown options
@@ -137,88 +140,94 @@ export function LongitudinalView({ panelistId, panelistName, batchId, onBatchCha
       }
     }
     loadBatches();
-  }, []);
+  }, [batchId, onBatchChange]);
 
   // Load data when batch or sub-criterion changes
   useEffect(() => {
-    if (batchId && selectedSub) loadData();
-    else setRows([]);
-  }, [batchId, selectedSub]);
+    async function loadData() {
+      if (!batchId || !selectedSub) { setRows([]); return; }
+      setLoading(true);
 
-  async function loadData() {
-    if (!batchId || !selectedSub) return;
-    setLoading(true);
+      // Fetch proposals for this batch
+      const { data: proposals } = await supabase
+        .from("proposals")
+        .select("id, org_name, country, theme, status")
+        .eq("batch_id", batchId)
+        .in("status", ["scored", "in_review", "finalized"]);
 
-    // Fetch proposals for this batch
-    const { data: proposals } = await supabase
-      .from("proposals")
-      .select("id, org_name, country, theme, status")
-      .eq("batch_id", batchId)
-      .in("status", ["scored", "in_review", "finalized"]);
+      if (!proposals || proposals.length === 0) { setRows([]); setLoading(false); return; }
 
-    if (!proposals || proposals.length === 0) { setRows([]); setLoading(false); return; }
+      const proposalIds = proposals.map((p) => p.id);
 
-    const proposalIds = proposals.map((p) => p.id);
+      // Fetch results and overrides in parallel
+      const [crRes, ovRes] = await Promise.all([
+        supabase.from("classifier_results").select("proposal_id, call1_json, call2_json").in("proposal_id", proposalIds),
+        supabase.from("panel_overrides")
+          .select("id, proposal_id, panelist_id, sub_criterion_key, original_score, override_score, rationale, created_at, panelists(name)")
+          .in("proposal_id", proposalIds)
+          .eq("sub_criterion_key", selectedSub)
+          .order("created_at", { ascending: true }),
+      ]);
 
-    // Fetch results and overrides in parallel
-    const [crRes, ovRes] = await Promise.all([
-      supabase.from("classifier_results").select("proposal_id, call1_json, call2_json").in("proposal_id", proposalIds),
-      supabase.from("panel_overrides")
-        .select("id, proposal_id, panelist_id, sub_criterion_key, original_score, override_score, rationale, created_at, panelists(name)")
-        .in("proposal_id", proposalIds)
-        .eq("sub_criterion_key", selectedSub)
-        .order("created_at", { ascending: true }),
-    ]);
-
-    const resultMap = new Map((crRes.data || []).map((r: any) => [r.proposal_id, r]));
-    const overrideMap = new Map<string, OverrideRecord[]>();
-    for (const o of (ovRes.data || [])) {
-      const arr = overrideMap.get(o.proposal_id) || [];
-      arr.push({ ...o, panelist_name: (o as any).panelists?.name || "Unknown" } as OverrideRecord);
-      overrideMap.set(o.proposal_id, arr);
-    }
-
-    // Extract sub-criterion data for each innovator
-    const isGate = !selectedSub.includes(".");
-    const newRows: InnovatorRow[] = [];
-
-    for (const p of proposals) {
-      const cr = resultMap.get(p.id);
-      if (!cr) continue;
-
-      let subData: any = null;
-
-      if (isGate) {
-        subData = cr.call1_json?.gates?.[selectedSub] || null;
-      } else {
-        const [dimKey, subKey] = selectedSub.split(".");
-        const src = (dimKey === "innovation_quality" || dimKey === "evidence_strength")
-          ? cr.call2_json?.dimensions
-          : cr.call1_json?.dimensions;
-        subData = src?.[dimKey]?.[subKey] || null;
+      type ClassifierRow = { proposal_id: string; call1_json: unknown; call2_json: unknown };
+      const resultMap = new Map((crRes.data || []).map((r: ClassifierRow) => [r.proposal_id, r]));
+      const overrideMap = new Map<string, OverrideRecord[]>();
+      for (const o of (ovRes.data || [])) {
+        const arr = overrideMap.get(o.proposal_id) || [];
+        const overrideRow = o as typeof o & { panelists?: { name?: string } };
+        arr.push({ ...o, panelist_name: overrideRow.panelists?.name || "Unknown" } as OverrideRecord);
+        overrideMap.set(o.proposal_id, arr);
       }
 
-      newRows.push({
-        proposalId: p.id,
-        orgName: p.org_name || "Unknown",
-        country: p.country || "",
-        theme: Array.isArray(p.theme) ? p.theme : (p.theme ? [p.theme] : []),
-        status: p.status,
-        aiScore: subData?.score ?? 0,
-        extract: subData?.extract || "",
-        interpretation: subData?.interpretation || "",
-        rubricAnchor: subData?.rubric_anchor || "",
-        borderline: subData?.borderline || null,
-        borderlineLow: subData?.borderline_rubric_low || null,
-        borderlineHigh: subData?.borderline_rubric_high || null,
-        panelVerify: subData?.panel_verify || null,
-        overrides: overrideMap.get(p.id) || [],
-      });
+      // Extract sub-criterion data for each innovator
+      const isGate = !selectedSub.includes(".");
+      const newRows: InnovatorRow[] = [];
+
+      for (const p of proposals) {
+        const cr = resultMap.get(p.id);
+        if (!cr) continue;
+
+        type SubData = Record<string, unknown> | null;
+        let subData: SubData = null;
+
+        if (isGate) {
+          const call1 = cr.call1_json as Record<string, unknown> | null;
+          const gates = call1?.["gates"] as Record<string, SubData> | undefined;
+          subData = gates?.[selectedSub] ?? null;
+        } else {
+          const [dimKey, subKey] = selectedSub.split(".");
+          const jsonSrc = (dimKey === "innovation_quality" || dimKey === "evidence_strength")
+            ? (cr.call2_json as Record<string, unknown> | null)
+            : (cr.call1_json as Record<string, unknown> | null);
+          const dims = jsonSrc?.["dimensions"] as Record<string, Record<string, SubData>> | undefined;
+          subData = dims?.[dimKey]?.[subKey] ?? null;
+        }
+
+        const sd = subData as Record<string, unknown> | null;
+        newRows.push({
+          proposalId: p.id,
+          orgName: p.org_name || "Unknown",
+          country: p.country || "",
+          theme: Array.isArray(p.theme) ? p.theme : (p.theme ? [p.theme] : []),
+          status: p.status,
+          aiScore: (sd?.["score"] as number) ?? 0,
+          extract: (sd?.["extract"] as string) || "",
+          interpretation: (sd?.["interpretation"] as string) || "",
+          rubricAnchor: (sd?.["rubric_anchor"] as string) || "",
+          borderline: (sd?.["borderline"] as string) || null,
+          borderlineLow: (sd?.["borderline_rubric_low"] as string) || null,
+          borderlineHigh: (sd?.["borderline_rubric_high"] as string) || null,
+          panelVerify: (sd?.["panel_verify"] as string) || null,
+          overrides: overrideMap.get(p.id) || [],
+        });
+      }
+
+      setRows(newRows);
+      setLoading(false);
     }
 
-    setRows(newRows);
-    setLoading(false);
-  }
+    loadData().catch(() => { /* ignore */ });
+  }, [batchId, selectedSub]);
 
   // Sort
   const sorted = [...rows].sort((a, b) => {
@@ -362,7 +371,7 @@ export function LongitudinalView({ panelistId, panelistName, batchId, onBatchCha
       </div>
 
       {!selectedSub && (
-        <div className="text-sm text-gray-400 py-20 text-center">Select a sub-criterion to view all innovators' scores.</div>
+        <div className="text-sm text-gray-400 py-20 text-center">Select a sub-criterion to view all innovators&apos; scores.</div>
       )}
 
       {selectedSub && rubric && (

@@ -55,7 +55,7 @@ export async function extractCostContext(
     for (const name of tabsToExtract) {
       if (!wb.SheetNames.includes(name)) continue;
       const ws = wb.Sheets[name];
-      const rows: any[][] = XLSX.utils.sheet_to_json(ws, {
+      const rows: (string | number | boolean | null | undefined)[][] = XLSX.utils.sheet_to_json(ws, {
         header: 1,
         defval: "",
       });
@@ -73,7 +73,7 @@ export async function extractCostContext(
     }
 
     return parts.join("\n\n");
-  } catch (e: any) {
-    return `(Cost template attached but could not be parsed: ${e.message})`;
+  } catch (e: unknown) {
+    return `(Cost template attached but could not be parsed: ${e instanceof Error ? e.message : String(e)})`;
   }
 }

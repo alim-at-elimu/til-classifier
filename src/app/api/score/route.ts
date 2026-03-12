@@ -14,13 +14,37 @@ export const maxDuration = 300;
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 const MAX_RETRIES = 3;
 
+// Anthropic API response types
+interface AnthropicContentBlock {
+  type: string;
+  text?: string;
+}
+interface AnthropicUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+}
+interface AnthropicErrorBody {
+  error?: { type?: string; message?: string };
+  type?: string;
+  message?: string;
+}
+interface AnthropicResponse {
+  content: AnthropicContentBlock[];
+  usage?: AnthropicUsage;
+}
+
+// Anthropic message content block (input)
+type ContentBlock =
+  | { type: "text"; text: string }
+  | { type: "document"; source: { type: string; media_type: string; data: string } };
+
 async function callClaude(
   system: string,
-  content: any[],
+  content: ContentBlock[],
   maxTok: number = 16000,
   model: string = "claude-opus-4-20250514"
 ): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
-  let data: any;
+  let data: AnthropicResponse | undefined;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const res = await fetch(ANTHROPIC_API, {
@@ -44,7 +68,7 @@ async function callClaude(
     }
 
     const rawErr = await res.text();
-    let errBody: any = {};
+    let errBody: AnthropicErrorBody = {};
     try {
       errBody = JSON.parse(rawErr);
     } catch {}
@@ -67,9 +91,11 @@ async function callClaude(
     );
   }
 
+  if (!data) throw new Error("No response data from Claude API");
+
   const text = data.content
-    .filter((b: any) => b.type === "text")
-    .map((b: any) => b.text)
+    .filter((b: AnthropicContentBlock) => b.type === "text")
+    .map((b: AnthropicContentBlock) => b.text ?? "")
     .join("");
 
   return {
@@ -136,12 +162,20 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Build Call 2 context exactly as the artifact does ──
-    const extractedOrg = call1.applicant?.name || org || "(extract from document)";
-    const extractedCountry = call1.applicant?.country || country || "(extract from document)";
-    const rawTheme = call1.applicant?.theme;
+    type SubScore = { score?: number };
+    type DimScores = Record<string, SubScore>;
+    type Call1Typed = {
+      applicant?: { name?: string; country?: string; theme?: string | string[] };
+      dimensions?: { government_depth?: DimScores; adoption_readiness?: DimScores; cost_realism?: DimScores };
+      all_gates_passed?: boolean;
+    };
+    const c1 = call1 as Call1Typed;
+    const extractedOrg = c1.applicant?.name || org || "(extract from document)";
+    const extractedCountry = c1.applicant?.country || country || "(extract from document)";
+    const rawTheme = c1.applicant?.theme;
     const extractedTheme = Array.isArray(rawTheme) ? rawTheme.join(", ") : (rawTheme || theme || "(extract from document)");
 
-    const d1 = call1.dimensions;
+    const d1 = c1.dimensions;
 
     const scaledPartial = (() => {
       const gd = DIM_DEFS.government_depth.reduce((s: number, k: string) => s + (d1?.government_depth?.[k]?.score || 0), 0);
@@ -150,7 +184,7 @@ export async function POST(req: NextRequest) {
       return Math.round((gd / 20) * 20) + Math.round((ar / 15) * 20) + Math.round((cr / 15) * 20);
     })();
 
-    const gateNote = call1.all_gates_passed
+    const gateNote = c1.all_gates_passed
       ? ""
       : "\nNOTE: One or more gates scored 1 or 2 (gate failure flagged). Score all dimensions normally regardless. The gate failure is an advisory flag for the panel.";
 
@@ -215,10 +249,10 @@ call1_scaled_partial: ${scaledPartial} (already scaled /60 — do not recompute)
           call2Result.outputTokens,
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Score route error:", err);
     return NextResponse.json(
-      { error: err.message || "Unknown error" },
+      { error: (err instanceof Error ? err.message : String(err)) || "Unknown error" },
       { status: 500 }
     );
   }
