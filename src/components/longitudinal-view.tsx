@@ -502,7 +502,8 @@ export function LongitudinalView({ panelistId, panelistName, batchId, onBatchCha
                           <span className="text-gray-500">{row.interpretation}</span>
                         </div>
                       )}
-                      {row.rubricAnchor && (
+                      {/* Rubric anchor omitted — sticky rubric panel above shows all levels */}
+                      {false && row.rubricAnchor && (
                         <div className="rounded bg-gray-50 border border-gray-100 px-2.5 py-1.5">
                           <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">AI assigned rubric level {row.aiScore}</div>
                           <div className="text-xs text-gray-500 leading-relaxed">{row.rubricAnchor}</div>
