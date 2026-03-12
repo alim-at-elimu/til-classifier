@@ -37,7 +37,7 @@ export default function Home() {
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
   const [batchName, setBatchName] = useState("Wave 1 March 2026");
   const [runCount, setRunCount] = useState(1);
-  const [resumableBatches, setResumableBatches] = useState<{ id: string; name: string; total: number; scored: number; errored: number }[]>([]);
+  const [resumableBatches, setResumableBatches] = useState<{ id: string; name: string; total: number; scored: number; errored: number; erroredNames: string[] }[]>([]);
   const [selectedResumeBatchId, setSelectedResumeBatchId] = useState<string | null>(null);
   const { accessToken } = useGoogleAuth();
   const runningRef = useRef(false);
@@ -71,16 +71,16 @@ export default function Home() {
     for (const b of batches) {
       const { data: proposals } = await supabase
         .from("proposals")
-        .select("id, status")
+        .select("id, status, org_name")
         .eq("batch_id", b.id);
 
       if (!proposals || proposals.length === 0) continue;
 
       const scored = proposals.filter((p) => p.status === "scored" || p.status === "in_review" || p.status === "finalized").length;
-      const errored = proposals.filter((p) => p.status === "error" || p.status === "scoring").length;
+      const erroredProposals = proposals.filter((p) => p.status === "error" || p.status === "scoring");
 
-      if (errored > 0) {
-        resumable.push({ id: b.id, name: b.name, total: proposals.length, scored, errored });
+      if (erroredProposals.length > 0) {
+        resumable.push({ id: b.id, name: b.name, total: proposals.length, scored, errored: erroredProposals.length, erroredNames: erroredProposals.map((p) => p.org_name || "Unknown") });
       }
     }
     setResumableBatches(resumable);
@@ -269,16 +269,25 @@ export default function Home() {
                   </option>
                 ))}
               </select>
-              {selectedResumeBatchId && (
-                <div>
-                  <button
-                    onClick={handleResumeBatch}
-                    className="rounded bg-amber-600 px-6 py-2 text-sm font-medium text-white hover:bg-amber-700"
-                  >
-                    Resume Batch ({resumableBatches.find((b) => b.id === selectedResumeBatchId)?.errored ?? 0} proposals to retry)
-                  </button>
-                </div>
-              )}
+              {selectedResumeBatchId && (() => {
+                const batch = resumableBatches.find((b) => b.id === selectedResumeBatchId);
+                return (
+                  <div>
+                    {batch && batch.erroredNames.length > 0 && (
+                      <div className="mb-3 text-xs text-amber-700 dark:text-amber-400">
+                        <span className="font-semibold">To retry:</span>{" "}
+                        {batch.erroredNames.join(", ")}
+                      </div>
+                    )}
+                    <button
+                      onClick={handleResumeBatch}
+                      className="rounded bg-amber-600 px-6 py-2 text-sm font-medium text-white hover:bg-amber-700"
+                    >
+                      Resume Batch ({batch?.errored ?? 0} proposals to retry)
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           )}
           {batchProgress && <BatchProgressDashboard progress={batchProgress} />}

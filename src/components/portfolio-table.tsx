@@ -45,6 +45,9 @@ export interface ProposalRow {
   gates_passed: boolean | null;
   lead_reviewer_id: string | null;
   finalized_by: string | null;
+  total_cost: number | null;
+  cost_per_teacher: number | null;
+  reviewed_count: number;
 }
 
 type SortKey = "org_name" | "country" | "theme" | "raw_total" | "recommendation" | "gates_passed";
@@ -262,7 +265,6 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [unlockConfirm, setUnlockConfirm] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [assigning, setAssigning] = useState(false);
   const [filterTheme, setFilterTheme] = useState<string | null>(null);
 
   // Load batches on mount
@@ -289,7 +291,7 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
   async function loadData() {
     let query = supabase
       .from("proposals")
-      .select("id, org_name, country, theme, status, lead_reviewer_id, finalized_by, classifier_results(raw_total, recommendation, gates_passed)")
+      .select("id, org_name, country, theme, status, lead_reviewer_id, finalized_by, classifier_results(raw_total, recommendation, gates_passed, call1_json)")
       .in("status", ["scored", "in_review", "finalized"]);
 
     if (batchId) {
@@ -304,14 +306,41 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
     if (panRes.data) setPanelists(panRes.data);
 
     if (propRes.data) {
+      // Fetch override counts for review progress
+      const proposalIds = propRes.data.map((p: any) => p.id);
+      const { data: overrides } = await supabase
+        .from("panel_overrides")
+        .select("proposal_id, sub_criterion_key")
+        .in("proposal_id", proposalIds);
+
+      // Count distinct sub_criterion_keys per proposal
+      const reviewedMap = new Map<string, Set<string>>();
+      for (const o of (overrides || [])) {
+        const set = reviewedMap.get(o.proposal_id) || new Set();
+        set.add(o.sub_criterion_key);
+        reviewedMap.set(o.proposal_id, set);
+      }
+
       const rows: ProposalRow[] = propRes.data.map((p: any) => {
         const cr = Array.isArray(p.classifier_results) ? p.classifier_results[0] : p.classifier_results;
+        const pf = cr?.call1_json?.pilot_financials;
+        let totalCost: number | null = null;
+        let costPerTeacher: number | null = null;
+        if (pf && (pf.cost_til != null || pf.cost_applicant != null || pf.cost_government_inkind != null)) {
+          totalCost = (pf.cost_til ?? 0) + (pf.cost_applicant ?? 0) + (pf.cost_government_inkind ?? 0);
+          if (pf.total_teachers && pf.total_teachers > 0) {
+            costPerTeacher = Math.round(totalCost! / pf.total_teachers);
+          }
+        }
         return {
           id: p.id, org_name: p.org_name || "Unknown", country: p.country || "",
           theme: Array.isArray(p.theme) ? p.theme : (p.theme ? [p.theme] : []), status: p.status, raw_total: cr?.raw_total ?? null,
           recommendation: cr?.recommendation ?? null, gates_passed: cr?.gates_passed ?? null,
           lead_reviewer_id: p.lead_reviewer_id,
           finalized_by: p.finalized_by,
+          total_cost: totalCost,
+          cost_per_teacher: costPerTeacher,
+          reviewed_count: reviewedMap.get(p.id)?.size || 0,
         };
       });
       setProposals(rows);
@@ -343,43 +372,24 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
 
   const displayed = filterTheme ? sorted.filter((p) => p.theme.includes(filterTheme)) : sorted;
 
-  function isBorderline(score: number | null): boolean {
-    return score !== null && score >= 75 && score <= 84;
-  }
+  const TOTAL_SUB_CRITERIA = 17;
 
-  function getReviewerName(reviewerId: string | null): string | null {
+  function getInitials(reviewerId: string | null): string | null {
     if (!reviewerId) return null;
     const p = panelists.find((pan) => pan.id === reviewerId);
-    return p?.name || null;
-  }
-
-  async function handleAssignReviewers() {
-    if (panelists.length === 0) return;
-    setAssigning(true);
-
-    const borderline = proposals.filter((p) => isBorderline(p.raw_total) && !p.lead_reviewer_id);
-    let idx = Math.floor(Math.random() * panelists.length);
-
-    for (const p of borderline) {
-      const assignee = panelists[idx % panelists.length];
-      idx++;
-
-      const { error } = await supabase
-        .from("proposals")
-        .update({ lead_reviewer_id: assignee.id })
-        .eq("id", p.id);
-
-      if (!error) {
-        setProposals((prev) => prev.map((pr) => pr.id === p.id ? { ...pr, lead_reviewer_id: assignee.id } : pr));
-      }
-    }
-    setAssigning(false);
+    if (!p?.name) return null;
+    return p.name.split(/\s+/).map((w) => w[0]).join("").toUpperCase();
   }
 
   async function handleLock(proposalId: string) {
     if (!panelistId) { alert("Select your name first."); return; }
+    const p = proposals.find((pr) => pr.id === proposalId);
+    if (p && p.reviewed_count < TOTAL_SUB_CRITERIA) {
+      alert(`${p.reviewed_count}/${TOTAL_SUB_CRITERIA} sub-criteria confirmed. All ${TOTAL_SUB_CRITERIA} must be confirmed or overridden before locking.`);
+      return;
+    }
     await supabase.from("proposals").update({ status: "finalized", finalized_by: panelistId }).eq("id", proposalId);
-    setProposals((prev) => prev.map((p) => (p.id === proposalId ? { ...p, status: "finalized", finalized_by: panelistId } : p)));
+    setProposals((prev) => prev.map((pr) => (pr.id === proposalId ? { ...pr, status: "finalized", finalized_by: panelistId } : pr)));
   }
 
   async function handleUnlock(proposalId: string) {
@@ -440,9 +450,6 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
   if (loading) return <div className="text-sm text-gray-500 dark:text-gray-400">Loading proposals...</div>;
   if (proposals.length === 0) return <div className="text-sm text-gray-500 dark:text-gray-400">No scored proposals found. Run a batch first.</div>;
 
-  const borderlineCount = proposals.filter((p) => isBorderline(p.raw_total)).length;
-  const unassignedBorderline = proposals.filter((p) => isBorderline(p.raw_total) && !p.lead_reviewer_id).length;
-
   return (
     <div>
       {/* Batch selector */}
@@ -466,9 +473,6 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className="text-xs text-gray-400 dark:text-gray-400">{displayed.length} of {proposals.length} proposal{proposals.length !== 1 ? "s" : ""}</div>
-          {borderlineCount > 0 && (
-            <div className="text-xs text-orange-600">{borderlineCount} for review (75-84)</div>
-          )}
           <div className="text-xs text-gray-300 dark:text-gray-600">|</div>
           {/* Theme filter tabs */}
           <button
@@ -495,15 +499,6 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
           })}
         </div>
         <div className="flex items-center gap-2">
-          {unassignedBorderline > 0 && (
-            <button
-              onClick={handleAssignReviewers}
-              disabled={assigning}
-              className="text-xs bg-orange-500 text-white rounded px-3 py-1.5 font-medium hover:bg-orange-600 disabled:opacity-50"
-            >
-              {assigning ? "Assigning..." : `Assign Reviewers (${unassignedBorderline})`}
-            </button>
-          )}
           <button
             onClick={handleExportAll}
             disabled={exporting}
@@ -524,7 +519,9 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
               <SortHeader label="Gates" sortKeyName="gates_passed" />
               <SortHeader label="Score" sortKeyName="raw_total" />
               <SortHeader label="Band" sortKeyName="recommendation" />
-              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Review</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total(K)</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">$/Tchr</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Reviewed</th>
               <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-16">Status</th>
             </tr>
           </thead>
@@ -532,8 +529,7 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
             {displayed.map((p) => {
               const band = BAND_STYLE[p.recommendation || ""] || { bg: "bg-gray-100", text: "text-gray-600" };
               const isLocked = p.status === "finalized";
-              const borderline = isBorderline(p.raw_total);
-              const reviewerName = getReviewerName(p.lead_reviewer_id);
+              const allReviewed = p.reviewed_count >= TOTAL_SUB_CRITERIA;
               return (
                 <tr
                   key={p.id}
@@ -568,22 +564,27 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
                       {p.recommendation || "—"}
                     </span>
                   </td>
+                  <td className="px-3 py-2.5 text-right font-mono text-xs text-gray-600 dark:text-gray-400">
+                    {p.total_cost != null ? `$${Math.round(p.total_cost / 1000)}K` : "—"}
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono text-xs text-gray-600 dark:text-gray-400">
+                    {p.cost_per_teacher != null ? `$${p.cost_per_teacher.toLocaleString()}` : "—"}
+                  </td>
                   <td className="px-3 py-2.5">
-                    {borderline ? (
-                      <div className="flex items-center gap-1.5">
-                        <span className="inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-orange-100 text-orange-700">Review</span>
-                        {reviewerName && <span className="text-xs text-gray-500 dark:text-gray-400">{reviewerName}</span>}
-                      </div>
-                    ) : null}
+                    <span className={`text-xs font-semibold tabular-nums ${allReviewed ? "text-green-600" : "text-red-500"}`}>
+                      {p.reviewed_count}/{TOTAL_SUB_CRITERIA}
+                    </span>
                   </td>
                   <td className="px-3 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                     {isLocked ? (
                       <div className="flex items-center justify-center gap-1.5">
-                        <span className="text-xs text-green-700 font-medium">Reviewed{getReviewerName(p.finalized_by) ? ` by ${getReviewerName(p.finalized_by)}` : ""}</span>
+                        <span className="text-xs text-green-700 font-medium">Locked{getInitials(p.finalized_by) ? ` by ${getInitials(p.finalized_by)}` : ""}</span>
                         <button onClick={() => setUnlockConfirm(p.id)} className="text-xs text-gray-400 hover:text-black dark:hover:text-white" title="Unlock">🔓</button>
                       </div>
                     ) : (
-                      <button onClick={() => handleLock(p.id)} className="text-xs text-gray-300 hover:text-black dark:hover:text-white" title="Click to review">☐</button>
+                      <button onClick={() => handleLock(p.id)} className={`text-xs ${allReviewed ? "text-green-600 hover:text-green-800" : "text-gray-300 hover:text-black dark:hover:text-white"}`} title={allReviewed ? "Lock review" : `${p.reviewed_count}/${TOTAL_SUB_CRITERIA} confirmed — all must be confirmed to lock`}>
+                        {allReviewed ? "☑" : "☐"}
+                      </button>
                     )}
                   </td>
                 </tr>

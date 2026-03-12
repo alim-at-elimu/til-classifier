@@ -6,23 +6,6 @@ interface PreflightTableProps {
   folders: InnovatorFolder[];
 }
 
-const OPUS_PROPOSALS = [
-  "Uthabiti",
-  "Mavis Computel",
-  "Sabre",
-  "Dignitas",
-  "Eval Pros",
-  "Edumalin",
-];
-
-function getModel(folderName: string): string {
-  return OPUS_PROPOSALS.some((name) =>
-    folderName.toLowerCase().includes(name.toLowerCase())
-  )
-    ? "Opus"
-    : "Sonnet";
-}
-
 export function PreflightTable({ folders }: PreflightTableProps) {
   const errors = folders.filter((f) => !f.proposalPdf);
   const ready = folders.filter((f) => f.proposalPdf);
@@ -46,7 +29,6 @@ export function PreflightTable({ folders }: PreflightTableProps) {
               <th className="text-left py-2 pr-4">Proposal PDF</th>
               <th className="text-left py-2 pr-4">Budget</th>
               <th className="text-left py-2 pr-4">Annexes</th>
-              <th className="text-left py-2 pr-4">Model</th>
               <th className="text-left py-2 pr-4">Status</th>
             </tr>
           </thead>
@@ -86,16 +68,6 @@ export function PreflightTable({ folders }: PreflightTableProps) {
                     {folder.annexes.length > 0
                       ? `${folder.annexes.length} file${folder.annexes.length > 1 ? "s" : ""}`
                       : "None"}
-                  </td>
-                  <td className="py-2 pr-4">
-                    {(() => {
-                      const m = getModel(folder.folderName);
-                      return m === "Opus" ? (
-                        <span className="text-purple-700 font-medium">Opus</span>
-                      ) : (
-                        <span className="text-gray-600">Sonnet</span>
-                      );
-                    })()}
                   </td>
                   <td className="py-2 pr-4">
                     {noPdf ? (

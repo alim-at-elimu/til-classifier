@@ -706,7 +706,16 @@ const CALL1_JSON_SCHEMA = `{
       "steady_state_fiscal": ${SUB_SCHEMA}
     }
   },
-  "call1_partial_raw": 0
+  "call1_partial_raw": 0,
+  "pilot_financials": {
+    "pilot_start": "YYYY-MM-DD or null if not found",
+    "pilot_end": "YYYY-MM-DD or null if not found",
+    "cost_til": 0,
+    "cost_applicant": 0,
+    "cost_government_inkind": 0,
+    "total_teachers": 0,
+    "notes": "optional note if data was unclear or estimated"
+  }
 }`;
 
 const CALL2_JSON_SCHEMA = `{
@@ -759,6 +768,16 @@ Tab "3. Scale-Up Pathway": authoritative source for adoption_timeline and transi
 Tab "4. Technology Costs": required for steady_state_fiscal where technology is involved.
 Tab "5. Summary": cross-checking totals only.
 Where narrative and template are inconsistent, score on the weaker of the two.`,
+  `PILOT FINANCIALS EXTRACTION:
+In addition to scoring, extract the following pilot-level financial data from the proposal narrative and/or cost template. Populate the "pilot_financials" object in your JSON output.
+- pilot_start: planned start date of the pilot (ISO date string YYYY-MM-DD). Use null if not found.
+- pilot_end: planned end date of the pilot (ISO date string YYYY-MM-DD). Use null if not found.
+- cost_til: total cost funded by TIL in USD (number). Use null if not found.
+- cost_applicant: total cost funded by the applicant in USD (number). Use null if not found.
+- cost_government_inkind: total government in-kind contribution in USD (number). Use null if not found.
+- total_teachers: total number of teachers in the pilot (integer). Use null if not found.
+- notes: brief note if any values were estimated, unclear, or derived from incomplete data. Use null if all values were clearly stated.
+Extract from whichever source contains the data (narrative PDF, cost template XLSX, or both). If a value appears in both sources and they differ, use the cost template value and note the discrepancy.`,
   `OUTPUT — valid JSON only, no markdown, no preamble:\n${CALL1_JSON_SCHEMA}`,
 ].join("\n\n");
 

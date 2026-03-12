@@ -398,6 +398,67 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
         )}
       </div>
 
+      {/* Pilot Financials */}
+      {(() => {
+        const pf = call1?.pilot_financials;
+        const hasPf = pf && (pf.cost_til != null || pf.cost_applicant != null || pf.cost_government_inkind != null || pf.total_teachers != null);
+        if (!hasPf) return (
+          <div className="mb-4 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2.5">
+            <h3 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Pilot Financials</h3>
+            <div className="text-xs text-gray-400 italic">Not available for this proposal.</div>
+          </div>
+        );
+        const costTil = pf.cost_til ?? 0;
+        const costApp = pf.cost_applicant ?? 0;
+        const costGov = pf.cost_government_inkind ?? 0;
+        const totalCost = costTil + costApp + costGov;
+        const teachers = pf.total_teachers ?? 0;
+        const costPerTeacher = teachers > 0 ? Math.round(totalCost / teachers) : null;
+        const fmtDate = (d: string | null) => {
+          if (!d) return "—";
+          try { return new Date(d).toLocaleDateString("en-US", { month: "short", year: "numeric" }); } catch { return d; }
+        };
+        const fmtUSD = (n: number | null) => n != null ? `$${n.toLocaleString()}` : "—";
+        return (
+          <div className="mb-4 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2.5">
+            <h3 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Pilot Financials</h3>
+            <div className="grid grid-cols-4 gap-3 text-xs">
+              <div>
+                <div className="text-gray-400">Period</div>
+                <div className="font-semibold">{fmtDate(pf.pilot_start)} – {fmtDate(pf.pilot_end)}</div>
+              </div>
+              <div>
+                <div className="text-gray-400">TIL Funded</div>
+                <div className="font-semibold">{fmtUSD(pf.cost_til)}</div>
+              </div>
+              <div>
+                <div className="text-gray-400">Applicant</div>
+                <div className="font-semibold">{fmtUSD(pf.cost_applicant)}</div>
+              </div>
+              <div>
+                <div className="text-gray-400">Gov In-Kind</div>
+                <div className="font-semibold">{fmtUSD(pf.cost_government_inkind)}</div>
+              </div>
+              <div>
+                <div className="text-gray-400">Total Cost</div>
+                <div className="font-bold text-black dark:text-white">{fmtUSD(totalCost)}</div>
+              </div>
+              <div>
+                <div className="text-gray-400">Teachers</div>
+                <div className="font-semibold">{teachers > 0 ? teachers.toLocaleString() : "—"}</div>
+              </div>
+              <div>
+                <div className="text-gray-400">Cost/Teacher</div>
+                <div className="font-bold text-black dark:text-white">{costPerTeacher != null ? fmtUSD(costPerTeacher) : "—"}</div>
+              </div>
+              {pf.notes && (
+                <div className="col-span-4 text-gray-400 italic mt-1 border-t border-gray-200 dark:border-gray-700 pt-1">{pf.notes}</div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Gates */}
       <div className="mb-4">
         <h3 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Hard Gates</h3>
@@ -489,7 +550,7 @@ export function ScoreCard({ proposalId, panelistId, panelistName, onBack }: Scor
                         <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                           {isReviewed && <span className="text-green-600 text-xs font-medium">✓</span>}
                           {!isLocked && !isReviewed && (
-                            <button onClick={(e) => { e.stopPropagation(); confirmSubCriterion(dimKey, subKey); }} className="text-xs text-green-600 hover:text-green-800 hover:bg-green-50 dark:hover:bg-green-950 rounded px-1.5 py-0.5" title="Confirm (no change)">✓</button>
+                            <button onClick={(e) => { e.stopPropagation(); confirmSubCriterion(dimKey, subKey); }} className="text-xs text-green-600 hover:text-green-800 border border-green-300 dark:border-green-700 hover:bg-green-50 dark:hover:bg-green-950 rounded px-1.5 py-0.5 font-medium" title="Confirm AI score (no change)">Confirm ✓</button>
                           )}
                           {!isLocked && (
                             <button onClick={(e) => { e.stopPropagation(); startEdit(overrideKey); }} className="text-xs text-gray-400 hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-2 py-0.5">Edit</button>
