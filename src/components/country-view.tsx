@@ -46,6 +46,15 @@ interface InnovatorData {
   band: string;
   gatesPassed: boolean;
   dimScores: Record<string, number>;
+  totalCost: number | null;
+  costPerTeacher: number | null;
+}
+
+interface PilotFinancials {
+  cost_til?: number | null;
+  cost_applicant?: number | null;
+  cost_government_inkind?: number | null;
+  total_teachers?: number | null;
 }
 
 interface CountryGroup {
@@ -134,6 +143,8 @@ function generateExportHTML(groups: CountryGroup[], batchName: string): string {
         <td style="padding:6px 10px;text-align:center;font-weight:700">${inv.adjustedTotal}/100</td>
         <td style="padding:6px 10px;text-align:center"><span style="background:${bandBg};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">${inv.band}</span></td>
         <td style="padding:6px 10px;text-align:center">${inv.gatesPassed ? "✓ Pass" : "✗ Fail"}</td>
+        <td style="padding:6px 10px;text-align:right;font-family:monospace;font-size:11px;color:#4b5563">${inv.totalCost != null ? `$${Math.round(inv.totalCost / 1000)}K` : "—"}</td>
+        <td style="padding:6px 10px;text-align:right;font-family:monospace;font-size:11px;color:#4b5563">${inv.costPerTeacher != null ? `$${inv.costPerTeacher.toLocaleString()}` : "—"}</td>
       </tr>`;
     }).join("");
 
@@ -156,6 +167,8 @@ function generateExportHTML(groups: CountryGroup[], batchName: string): string {
             <th style="padding:6px 10px;text-align:center">Total</th>
             <th style="padding:6px 10px;text-align:center">Band</th>
             <th style="padding:6px 10px;text-align:center">Gates</th>
+            <th style="padding:6px 10px;text-align:right;font-size:11px;font-weight:600;background:#f3f4f6">Pilot Cost</th>
+            <th style="padding:6px 10px;text-align:right;font-size:11px;font-weight:600;background:#f3f4f6">$/Teacher</th>
           </tr>
         </thead>
         <tbody>${innovatorRows}</tbody>
@@ -260,6 +273,17 @@ export function CountryView({ batchId, onBatchChange }: CountryViewProps) {
           dimScores[dimKey] = getDimScaled(cr.call1_json, cr.call2_json, dimKey, overrides);
         }
 
+        // Extract pilot financials
+        const pf = (cr.call1_json as Record<string, unknown>)?.pilot_financials as PilotFinancials | undefined;
+        let totalCost: number | null = null;
+        let costPerTeacher: number | null = null;
+        if (pf && (pf.cost_til != null || pf.cost_applicant != null || pf.cost_government_inkind != null)) {
+          totalCost = (pf.cost_til ?? 0) + (pf.cost_applicant ?? 0) + (pf.cost_government_inkind ?? 0);
+          if (pf.total_teachers && pf.total_teachers > 0) {
+            costPerTeacher = Math.round(totalCost / pf.total_teachers);
+          }
+        }
+
         innovators.push({
           proposalId: p.id,
           orgName: p.org_name || "Unknown",
@@ -269,6 +293,8 @@ export function CountryView({ batchId, onBatchChange }: CountryViewProps) {
           band,
           gatesPassed: cr.gates_passed ?? false,
           dimScores,
+          totalCost,
+          costPerTeacher,
         });
       }
 
@@ -363,6 +389,8 @@ export function CountryView({ batchId, onBatchChange }: CountryViewProps) {
                   <th className="px-3 py-2 text-center">Total</th>
                   <th className="px-3 py-2 text-center">Band</th>
                   <th className="px-3 py-2 text-center">Gates</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">Pilot Cost</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">$/Teacher</th>
                 </tr>
               </thead>
               <tbody>
@@ -395,6 +423,12 @@ export function CountryView({ batchId, onBatchChange }: CountryViewProps) {
                           ? <span className="text-green-600 font-medium">Pass</span>
                           : <span className="text-red-500 font-medium">Fail</span>
                         }
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-gray-600 dark:text-gray-400">
+                        {inv.totalCost != null ? `$${Math.round(inv.totalCost / 1000)}K` : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-gray-600 dark:text-gray-400">
+                        {inv.costPerTeacher != null ? `$${inv.costPerTeacher.toLocaleString()}` : "—"}
                       </td>
                     </tr>
                   );
