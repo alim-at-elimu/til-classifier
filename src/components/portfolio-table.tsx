@@ -41,6 +41,8 @@ export interface ProposalRow {
   theme: string[];
   status: string;
   raw_total: number | null;
+  adjusted_total: number | null;
+  adjusted_rec: string | null;
   recommendation: string | null;
   gates_passed: boolean | null;
   lead_reviewer_id: string | null;
@@ -153,11 +155,13 @@ interface RawProposalRow {
     recommendation: string | null;
     gates_passed: boolean | null;
     call1_json: CallJson;
+    call2_json: CallJson | null;
   } | {
     raw_total: number | null;
     recommendation: string | null;
     gates_passed: boolean | null;
     call1_json: CallJson;
+    call2_json: CallJson | null;
   }[] | null;
 }
 
@@ -367,7 +371,7 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
   const loadData = useCallback(async () => {
     let query = supabase
       .from("proposals")
-      .select("id, org_name, country, theme, status, lead_reviewer_id, finalized_by, classifier_results(raw_total, recommendation, gates_passed, call1_json)")
+      .select("id, org_name, country, theme, status, lead_reviewer_id, finalized_by, classifier_results(raw_total, recommendation, gates_passed, call1_json, call2_json)")
       .in("status", ["scored", "in_review", "finalized"]);
 
     if (batchId) {
@@ -386,15 +390,20 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
       const proposalIds = (propRes.data as RawProposalRow[]).map((p) => p.id);
       const { data: overrides } = await supabase
         .from("panel_overrides")
-        .select("proposal_id, sub_criterion_key")
+        .select("proposal_id, sub_criterion_key, override_score")
         .in("proposal_id", proposalIds);
 
-      // Count distinct sub_criterion_keys per proposal
+      // Count distinct sub_criterion_keys per proposal + build override maps
       const reviewedMap = new Map<string, Set<string>>();
+      const overrideScoreMap = new Map<string, Record<string, number>>();
       for (const o of (overrides || [])) {
         const set = reviewedMap.get(o.proposal_id) || new Set();
         set.add(o.sub_criterion_key);
         reviewedMap.set(o.proposal_id, set);
+        // Track latest override score per sub-criterion per proposal
+        const scores = overrideScoreMap.get(o.proposal_id) || {};
+        scores[o.sub_criterion_key] = o.override_score;
+        overrideScoreMap.set(o.proposal_id, scores);
       }
 
       const rows: ProposalRow[] = (propRes.data as RawProposalRow[]).map((p) => {
@@ -408,9 +417,21 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
             costPerTeacher = Math.round(totalCost! / pf.total_teachers);
           }
         }
+        // Compute adjusted totals using overrides
+        const propOverrides = overrideScoreMap.get(p.id) || {};
+        const hasOverrides = Object.keys(propOverrides).length > 0;
+        let adjustedTotal: number | null = null;
+        let adjustedRec: string | null = null;
+        if (hasOverrides && cr?.call1_json) {
+          const adjusted = computeTotals(cr.call1_json, cr.call2_json, propOverrides);
+          adjustedTotal = adjusted.total;
+          adjustedRec = adjusted.rec;
+        }
         return {
           id: p.id, org_name: p.org_name || "Unknown", country: p.country || "",
           theme: Array.isArray(p.theme) ? p.theme : (p.theme ? [p.theme] : []), status: p.status, raw_total: cr?.raw_total ?? null,
+          adjusted_total: adjustedTotal,
+          adjusted_rec: adjustedRec,
           recommendation: cr?.recommendation ?? null, gates_passed: cr?.gates_passed ?? null,
           lead_reviewer_id: p.lead_reviewer_id,
           finalized_by: p.finalized_by,
@@ -461,9 +482,9 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
       case "theme":
         cmp = a.theme.join(", ").localeCompare(b.theme.join(", ")); break;
       case "raw_total":
-        cmp = (a.raw_total ?? 0) - (b.raw_total ?? 0); break;
+        cmp = (a.adjusted_total ?? a.raw_total ?? 0) - (b.adjusted_total ?? b.raw_total ?? 0); break;
       case "recommendation":
-        cmp = (BAND_ORDER[a.recommendation || ""] ?? 0) - (BAND_ORDER[b.recommendation || ""] ?? 0); break;
+        cmp = (BAND_ORDER[a.adjusted_rec || a.recommendation || ""] ?? 0) - (BAND_ORDER[b.adjusted_rec || b.recommendation || ""] ?? 0); break;
       case "gates_passed":
         cmp = (a.gates_passed ? 1 : 0) - (b.gates_passed ? 1 : 0); break;
     }
@@ -615,7 +636,6 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
             {displayed.map((p) => {
-              const band = BAND_STYLE[p.recommendation || ""] || { bg: "bg-gray-100", text: "text-gray-600" };
               const isLocked = p.status === "finalized";
               const allReviewed = p.reviewed_count >= TOTAL_SUB_CRITERIA;
               return (
@@ -646,11 +666,25 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
                       <span className="text-red-600 font-semibold text-xs">FAIL</span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 font-bold tabular-nums">{p.raw_total ?? "—"}</td>
+                  <td className="px-3 py-2.5 font-bold tabular-nums">
+                    {p.adjusted_total != null ? (
+                      <span title={`AI: ${p.raw_total}`}>
+                        {p.adjusted_total}
+                        {p.adjusted_total !== p.raw_total && <span className="text-xs text-gray-400 line-through ml-1 font-normal">{p.raw_total}</span>}
+                      </span>
+                    ) : (p.raw_total ?? "—")}
+                  </td>
                   <td className="px-3 py-2.5">
-                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${band.bg} ${band.text}`}>
-                      {p.recommendation || "—"}
-                    </span>
+                    {(() => {
+                      const displayRec = p.adjusted_rec || p.recommendation;
+                      const displayBand = BAND_STYLE[displayRec || ""] || { bg: "bg-gray-100", text: "text-gray-600" };
+                      const changed = p.adjusted_rec && p.adjusted_rec !== p.recommendation;
+                      return (
+                        <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${displayBand.bg} ${displayBand.text}`} title={changed ? `AI: ${p.recommendation}` : undefined}>
+                          {displayRec || "—"}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-3 py-2.5 text-right font-mono text-xs text-gray-600 dark:text-gray-400">
                     {p.total_cost != null ? `$${Math.round(p.total_cost / 1000)}K` : "—"}
