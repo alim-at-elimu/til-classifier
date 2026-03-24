@@ -21,16 +21,20 @@ import type { ShortlistProgress, ShortlistReviewResult } from "@/lib/shortlist-r
 
 type Tab = "batch" | "review" | "analytics" | "longitudinal" | "country" | "shortlist";
 
+type ShortlistSubTab = "select" | "reviews";
+
 function ShortlistTab({ batchId, onBatchChange, accessToken, tokenRef }: {
   batchId: string | null;
   onBatchChange: (id: string | null) => void;
   accessToken: string | null;
   tokenRef: React.RefObject<string | null>;
 }) {
+  const [subTab, setSubTab] = useState<ShortlistSubTab>("select");
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<ShortlistProgress | null>(null);
   const [results, setResults] = useState<ShortlistReviewResult[]>([]);
   const [loadingPast, setLoadingPast] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Load past reviews when batch changes
   useEffect(() => {
@@ -46,7 +50,7 @@ function ShortlistTab({ batchId, onBatchChange, accessToken, tokenRef }: {
       if (!cancelled) setLoadingPast(false);
     });
     return () => { cancelled = true; };
-  }, [batchId]);
+  }, [batchId, refreshKey]);
 
   async function handleRunReview(ids: string[]) {
     if (!accessToken) {
@@ -64,12 +68,16 @@ function ShortlistTab({ batchId, onBatchChange, accessToken, tokenRef }: {
       for (const r of newResults) {
         window.open(`/shortlist/${r.reviewId}`, "_blank");
       }
-      // Also merge into local state so selector shows updated status
+      // Merge into local state
       setResults((prev) => {
         const updated = new Map(prev.map((r) => [r.proposalId, r]));
         for (const r of newResults) updated.set(r.proposalId, r);
         return Array.from(updated.values());
       });
+      // Bump refreshKey so the selector re-fetches traffic lights
+      setRefreshKey((k) => k + 1);
+      // Auto-switch to Reviews sub-tab
+      setSubTab("reviews");
     } catch (err) {
       console.error("Shortlist review error:", err);
     } finally {
@@ -78,62 +86,102 @@ function ShortlistTab({ batchId, onBatchChange, accessToken, tokenRef }: {
     }
   }
 
+  const reviewCount = results.length;
+
   return (
     <>
-      <ShortlistSelector
-        batchId={batchId}
-        onBatchChange={onBatchChange}
-        onRunReview={handleRunReview}
-        disabled={running || !accessToken}
-      />
+      {/* Sub-tab bar */}
+      <div className="flex border-b border-gray-200 dark:border-gray-700 mb-5">
+        <button
+          onClick={() => setSubTab("select")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${subTab === "select" ? "border-indigo-600 text-indigo-600 dark:text-indigo-400 dark:border-indigo-400" : "border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}
+        >
+          Select Proposals
+        </button>
+        <button
+          onClick={() => setSubTab("reviews")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${subTab === "reviews" ? "border-indigo-600 text-indigo-600 dark:text-indigo-400 dark:border-indigo-400" : "border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}
+        >
+          Reviews
+          {reviewCount > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">
+              {reviewCount}
+            </span>
+          )}
+        </button>
+      </div>
 
-      {running && progress && (
-        <div className="py-6">
-          <div className="text-sm font-medium mb-2">
-            {progress.phase === "downloading" && `Downloading PDF: ${progress.current}`}
-            {progress.phase === "reviewing" && `Reviewing: ${progress.current}`}
-            {progress.phase === "saving" && `Saving: ${progress.current}`}
-            {progress.phase === "done" && "Complete"}
-          </div>
-          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-2">
-            <div
-              className="bg-indigo-600 h-2 rounded-full transition-all"
-              style={{ width: `${Math.round((progress.completed / progress.total) * 100)}%` }}
-            />
-          </div>
-          <div className="text-xs text-gray-500">
-            {progress.completed} / {progress.total} proposals
-          </div>
-          {progress.errors.length > 0 && (
-            <div className="mt-3 text-xs text-red-600 dark:text-red-400">
-              {progress.errors.length} error{progress.errors.length !== 1 ? "s" : ""}:{" "}
-              {progress.errors.map((e) => e.name).join(", ")}
+      {/* Select sub-tab */}
+      {subTab === "select" && (
+        <>
+          <ShortlistSelector
+            batchId={batchId}
+            onBatchChange={onBatchChange}
+            onRunReview={handleRunReview}
+            disabled={running || !accessToken}
+            refreshKey={refreshKey}
+          />
+
+          {running && progress && (
+            <div className="py-6">
+              <div className="text-sm font-medium mb-2">
+                {progress.phase === "downloading" && `Downloading PDF: ${progress.current}`}
+                {progress.phase === "reviewing" && `Reviewing: ${progress.current}`}
+                {progress.phase === "saving" && `Saving: ${progress.current}`}
+                {progress.phase === "done" && "Complete"}
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-2">
+                <div
+                  className="bg-indigo-600 h-2 rounded-full transition-all"
+                  style={{ width: `${Math.round((progress.completed / progress.total) * 100)}%` }}
+                />
+              </div>
+              <div className="text-xs text-gray-500">
+                {progress.completed} / {progress.total} proposals
+              </div>
+              {progress.errors.length > 0 && (
+                <div className="mt-3 text-xs text-red-600 dark:text-red-400">
+                  {progress.errors.length} error{progress.errors.length !== 1 ? "s" : ""}:{" "}
+                  {progress.errors.map((e) => e.name).join(", ")}
+                </div>
+              )}
             </div>
           )}
-        </div>
+        </>
       )}
 
-      {loadingPast && (
-        <div className="text-sm text-gray-400 py-4">Loading past reviews...</div>
-      )}
+      {/* Reviews sub-tab */}
+      {subTab === "reviews" && (
+        <>
+          {loadingPast && (
+            <div className="text-sm text-gray-400 py-4">Loading reviews...</div>
+          )}
 
-      {!loadingPast && results.length > 0 && (
-        <div className="mt-4">
-          <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-            {results.length} review{results.length !== 1 ? "s" : ""}
-          </div>
-          {results.map((r) => (
-            <ShortlistReviewCard
-              key={r.proposalId}
-              proposalId={r.proposalId}
-              orgName={r.orgName}
-              country={r.country}
-              totalScore={r.totalScore}
-              modelUsed={r.modelUsed}
-              review={r.review as never}
-            />
-          ))}
-        </div>
+          {!loadingPast && results.length === 0 && (
+            <div className="text-sm text-gray-500 py-8">
+              No reviews yet. Select proposals in the &ldquo;Select Proposals&rdquo; tab and run a shortlist review.
+            </div>
+          )}
+
+          {!loadingPast && results.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                {results.length} review{results.length !== 1 ? "s" : ""}
+              </div>
+              {results.map((r) => (
+                <ShortlistReviewCard
+                  key={r.proposalId}
+                  proposalId={r.proposalId}
+                  orgName={r.orgName}
+                  country={r.country}
+                  totalScore={r.totalScore}
+                  modelUsed={r.modelUsed}
+                  review={r.review as never}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </>
   );

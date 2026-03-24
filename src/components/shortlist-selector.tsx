@@ -13,6 +13,16 @@ interface ProposalRow {
   classifier_results: { raw_total: number; recommendation: string; call1_json: CallJson; call2_json: CallJson | null }[];
 }
 
+type ReviewStatus = "green" | "amber" | "red";
+
+interface ReviewStatuses {
+  q1: ReviewStatus;
+  q2: ReviewStatus;
+  q3: ReviewStatus;
+  q4: ReviewStatus;
+  q5: ReviewStatus;
+}
+
 interface ShortlistProposal {
   id: string;
   name: string;
@@ -20,6 +30,7 @@ interface ShortlistProposal {
   themes: string[];
   totalScore: number;
   recommendation: string;
+  reviewStatuses: ReviewStatuses | null;
   reviewedAt: string | null;
 }
 
@@ -34,7 +45,13 @@ interface ShortlistSelectorProps {
   disabled: boolean;
   batchId: string | null;
   onBatchChange: (batchId: string | null) => void;
+  refreshKey?: number;
 }
+
+type SortColumn = "name" | "country" | "totalScore" | "recommendation";
+type SortDirection = "asc" | "desc";
+
+const BAND_ORDER: Record<string, number> = { Excellent: 4, Good: 3, Weak: 2, Fail: 1 };
 
 function bandColor(rec: string): string {
   switch (rec) {
@@ -46,12 +63,33 @@ function bandColor(rec: string): string {
   }
 }
 
-export function ShortlistSelector({ onRunReview, disabled, batchId, onBatchChange }: ShortlistSelectorProps) {
+const Q_LABELS: { key: keyof ReviewStatuses; short: string; full: string }[] = [
+  { key: "q1", short: "ICP", full: "In-Country Presence" },
+  { key: "q2", short: "IE", full: "Innovation Evidence" },
+  { key: "q3", short: "CA", full: "Cost & Affordability" },
+  { key: "q4", short: "FLN", full: "FLN Track Record" },
+  { key: "q5", short: "FF", full: "Financial Flexibility" },
+];
+
+const DOT_COLOR: Record<ReviewStatus, string> = {
+  green: "bg-green-500",
+  amber: "bg-amber-500",
+  red: "bg-red-500",
+};
+
+function SortIcon({ column, current, direction }: { column: SortColumn; current: SortColumn | null; direction: SortDirection }) {
+  if (current !== column) return <span className="text-gray-300 dark:text-gray-600 ml-1">↕</span>;
+  return <span className="ml-1">{direction === "asc" ? "▲" : "▼"}</span>;
+}
+
+export function ShortlistSelector({ onRunReview, disabled, batchId, onBatchChange, refreshKey = 0 }: ShortlistSelectorProps) {
   const [batches, setBatches] = useState<BatchOption[]>([]);
   const [proposals, setProposals] = useState<ShortlistProposal[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
+  const [sortCol, setSortCol] = useState<SortColumn | null>(null);
+  const [sortDir, setSortDir] = useState<SortDirection>("asc");
 
   // Load batches on mount
   useEffect(() => {
@@ -70,14 +108,14 @@ export function ShortlistSelector({ onRunReview, disabled, batchId, onBatchChang
     loadBatches();
   }, [batchId, onBatchChange]);
 
-  // Load proposals when batch changes
+  // Load proposals when batch changes or refreshKey bumps
   useEffect(() => {
     if (!batchId) return;
     let cancelled = false;
 
     (async () => {
       setLoading(true);
-      setSelected(new Set());
+      // Don't clear selection on refresh — only on batch change
       const { data, error } = await supabase
         .from("proposals")
         .select("id, org_name, country, theme, classifier_results(raw_total, recommendation, call1_json, call2_json)")
@@ -108,19 +146,30 @@ export function ShortlistSelector({ onRunReview, disabled, batchId, onBatchChang
         overrideScoreMap.set(o.proposal_id, scores);
       }
 
-      // Check which proposals have shortlist reviews
+      // Check which proposals have shortlist reviews — fetch review_json for statuses
       const { data: reviews } = await supabase
         .from("shortlist_reviews")
-        .select("proposal_id, created_at")
+        .select("proposal_id, created_at, review_json")
         .in("proposal_id", proposalIds)
         .order("created_at", { ascending: false });
 
       if (cancelled) return;
 
-      const reviewMap = new Map<string, string>();
+      const reviewMap = new Map<string, { createdAt: string; statuses: ReviewStatuses | null }>();
       for (const r of (reviews || [])) {
         if (!reviewMap.has(r.proposal_id)) {
-          reviewMap.set(r.proposal_id, r.created_at);
+          let statuses: ReviewStatuses | null = null;
+          const rj = r.review_json as Record<string, { status?: ReviewStatus }> | null;
+          if (rj && rj.q1 && rj.q2 && rj.q3 && rj.q4 && rj.q5) {
+            statuses = {
+              q1: rj.q1.status || "red",
+              q2: rj.q2.status || "red",
+              q3: rj.q3.status || "red",
+              q4: rj.q4.status || "red",
+              q5: rj.q5.status || "red",
+            };
+          }
+          reviewMap.set(r.proposal_id, { createdAt: r.created_at, statuses });
         }
       }
 
@@ -138,6 +187,8 @@ export function ShortlistSelector({ onRunReview, disabled, batchId, onBatchChang
           recommendation = adjusted.rec;
         }
 
+        const rev = reviewMap.get(p.id);
+
         return {
           id: p.id,
           name: p.org_name || "Unknown",
@@ -145,7 +196,8 @@ export function ShortlistSelector({ onRunReview, disabled, batchId, onBatchChang
           themes: p.theme || [],
           totalScore,
           recommendation,
-          reviewedAt: reviewMap.get(p.id) || null,
+          reviewStatuses: rev?.statuses ?? null,
+          reviewedAt: rev?.createdAt ?? null,
         };
       });
 
@@ -154,6 +206,11 @@ export function ShortlistSelector({ onRunReview, disabled, batchId, onBatchChang
     })();
 
     return () => { cancelled = true; };
+  }, [batchId, refreshKey]);
+
+  // Clear selection when batch changes (not on refreshKey)
+  useEffect(() => {
+    setSelected(new Set());
   }, [batchId]);
 
   const filtered = useMemo(() => {
@@ -166,16 +223,49 @@ export function ShortlistSelector({ onRunReview, disabled, batchId, onBatchChang
     );
   }, [proposals, search]);
 
-  const allVisibleSelected = filtered.length > 0 && filtered.every((p) => selected.has(p.id));
+  const sorted = useMemo(() => {
+    if (!sortCol) return filtered;
+    const list = [...filtered];
+    list.sort((a, b) => {
+      let cmp = 0;
+      switch (sortCol) {
+        case "name":
+          cmp = a.name.localeCompare(b.name);
+          break;
+        case "country":
+          cmp = a.country.localeCompare(b.country);
+          break;
+        case "totalScore":
+          cmp = a.totalScore - b.totalScore;
+          break;
+        case "recommendation":
+          cmp = (BAND_ORDER[a.recommendation] ?? 0) - (BAND_ORDER[b.recommendation] ?? 0);
+          break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return list;
+  }, [filtered, sortCol, sortDir]);
+
+  const allVisibleSelected = sorted.length > 0 && sorted.every((p) => selected.has(p.id));
+
+  function handleSort(col: SortColumn) {
+    if (sortCol === col) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortCol(col);
+      setSortDir("asc");
+    }
+  }
 
   function toggleAll() {
     if (allVisibleSelected) {
       const next = new Set(selected);
-      filtered.forEach((p) => next.delete(p.id));
+      sorted.forEach((p) => next.delete(p.id));
       setSelected(next);
     } else {
       const next = new Set(selected);
-      filtered.forEach((p) => next.add(p.id));
+      sorted.forEach((p) => next.add(p.id));
       setSelected(next);
     }
   }
@@ -186,6 +276,9 @@ export function ShortlistSelector({ onRunReview, disabled, batchId, onBatchChang
     else next.add(id);
     setSelected(next);
   }
+
+  const thClass = "px-3 py-2 text-left font-medium select-none";
+  const sortableThClass = `${thClass} cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400`;
 
   return (
     <div>
@@ -216,7 +309,7 @@ export function ShortlistSelector({ onRunReview, disabled, batchId, onBatchChang
           className="rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 px-3 py-2 text-sm flex-1 max-w-md"
         />
         <span className="text-sm text-gray-500">
-          {filtered.length} proposal{filtered.length !== 1 ? "s" : ""} shown
+          {sorted.length} proposal{sorted.length !== 1 ? "s" : ""} shown
         </span>
       </div>
 
@@ -238,16 +331,24 @@ export function ShortlistSelector({ onRunReview, disabled, batchId, onBatchChang
                       className="rounded"
                     />
                   </th>
-                  <th className="px-3 py-2 text-left font-medium">Name</th>
-                  <th className="px-3 py-2 text-left font-medium">Country</th>
-                  <th className="px-3 py-2 text-left font-medium">Themes</th>
-                  <th className="px-3 py-2 text-right font-medium">Score</th>
-                  <th className="px-3 py-2 text-left font-medium">Band</th>
-                  <th className="px-3 py-2 text-center font-medium">Reviewed</th>
+                  <th className={sortableThClass} onClick={() => handleSort("name")}>
+                    Name<SortIcon column="name" current={sortCol} direction={sortDir} />
+                  </th>
+                  <th className={sortableThClass} onClick={() => handleSort("country")}>
+                    Country<SortIcon column="country" current={sortCol} direction={sortDir} />
+                  </th>
+                  <th className={thClass}>Themes</th>
+                  <th className={`${sortableThClass} text-right`} onClick={() => handleSort("totalScore")}>
+                    Score<SortIcon column="totalScore" current={sortCol} direction={sortDir} />
+                  </th>
+                  <th className={sortableThClass} onClick={() => handleSort("recommendation")}>
+                    Band<SortIcon column="recommendation" current={sortCol} direction={sortDir} />
+                  </th>
+                  <th className={`${thClass} text-center`}>Review Status</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((p) => (
+                {sorted.map((p) => (
                   <tr
                     key={p.id}
                     className={`border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900 cursor-pointer ${selected.has(p.id) ? "bg-blue-50 dark:bg-blue-950" : ""}`}
@@ -271,12 +372,26 @@ export function ShortlistSelector({ onRunReview, disabled, batchId, onBatchChang
                     <td className={`px-3 py-2 font-medium ${bandColor(p.recommendation)}`}>
                       {p.recommendation}
                     </td>
-                    <td className="px-3 py-2 text-center">
-                      {p.reviewedAt ? (
-                        <span className="text-green-600 dark:text-green-400" title={new Date(p.reviewedAt).toLocaleString()}>
-                          ✓
-                        </span>
-                      ) : null}
+                    <td className="px-3 py-2">
+                      {p.reviewStatuses ? (
+                        <div
+                          className="flex items-center justify-center gap-2"
+                          title={`Reviewed ${p.reviewedAt ? new Date(p.reviewedAt).toLocaleString() : ""}`}
+                        >
+                          {Q_LABELS.map(({ key, short, full }) => (
+                            <span
+                              key={key}
+                              className="inline-flex items-center gap-0.5"
+                              title={`${full}: ${p.reviewStatuses![key]}`}
+                            >
+                              <span className="text-[9px] font-semibold text-gray-400 dark:text-gray-500">{short}</span>
+                              <span className={`inline-block w-2 h-2 rounded-full ${DOT_COLOR[p.reviewStatuses![key]]}`} />
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-300 dark:text-gray-600 text-center block">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}
