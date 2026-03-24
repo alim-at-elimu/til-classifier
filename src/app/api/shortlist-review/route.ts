@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export const maxDuration = 600;
+export const maxDuration = 300;
 
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 const MAX_RETRIES = 3;
