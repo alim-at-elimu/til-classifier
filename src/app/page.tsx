@@ -14,8 +14,130 @@ import { runBatch, BatchProgress } from "@/lib/batch-runner";
 import { AnalyticsDashboard } from "@/components/analytics-dashboard";
 import { LongitudinalView } from "@/components/longitudinal-view";
 import { CountryView } from "@/components/country-view";
+import { ShortlistSelector } from "@/components/shortlist-selector";
+import { ShortlistReviewCard } from "@/components/shortlist-review-card";
+import { runShortlistReview, loadShortlistReviews } from "@/lib/shortlist-runner";
+import type { ShortlistProgress, ShortlistReviewResult } from "@/lib/shortlist-runner";
 
-type Tab = "batch" | "review" | "analytics" | "longitudinal" | "country";
+type Tab = "batch" | "review" | "analytics" | "longitudinal" | "country" | "shortlist";
+
+function ShortlistTab({ batchId, onBatchChange, accessToken, tokenRef }: {
+  batchId: string | null;
+  onBatchChange: (id: string | null) => void;
+  accessToken: string | null;
+  tokenRef: React.RefObject<string | null>;
+}) {
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState<ShortlistProgress | null>(null);
+  const [results, setResults] = useState<ShortlistReviewResult[]>([]);
+  const [loadingPast, setLoadingPast] = useState(false);
+
+  // Load past reviews when batch changes
+  useEffect(() => {
+    if (!batchId) return;
+    let cancelled = false;
+    setLoadingPast(true);
+    loadShortlistReviews(batchId).then((past) => {
+      if (!cancelled) {
+        setResults(past);
+        setLoadingPast(false);
+      }
+    }).catch(() => {
+      if (!cancelled) setLoadingPast(false);
+    });
+    return () => { cancelled = true; };
+  }, [batchId]);
+
+  async function handleRunReview(ids: string[]) {
+    if (!accessToken) {
+      alert("Please sign in with Google first to access proposal documents.");
+      return;
+    }
+    setRunning(true);
+    try {
+      const newResults = await runShortlistReview(
+        ids,
+        () => tokenRef.current!,
+        (p) => setProgress({ ...p })
+      );
+      // Open each result in a new browser tab
+      for (const r of newResults) {
+        window.open(`/shortlist/${r.reviewId}`, "_blank");
+      }
+      // Also merge into local state so selector shows updated status
+      setResults((prev) => {
+        const updated = new Map(prev.map((r) => [r.proposalId, r]));
+        for (const r of newResults) updated.set(r.proposalId, r);
+        return Array.from(updated.values());
+      });
+    } catch (err) {
+      console.error("Shortlist review error:", err);
+    } finally {
+      setRunning(false);
+      setProgress(null);
+    }
+  }
+
+  return (
+    <>
+      <ShortlistSelector
+        batchId={batchId}
+        onBatchChange={onBatchChange}
+        onRunReview={handleRunReview}
+        disabled={running || !accessToken}
+      />
+
+      {running && progress && (
+        <div className="py-6">
+          <div className="text-sm font-medium mb-2">
+            {progress.phase === "downloading" && `Downloading PDF: ${progress.current}`}
+            {progress.phase === "reviewing" && `Reviewing: ${progress.current}`}
+            {progress.phase === "saving" && `Saving: ${progress.current}`}
+            {progress.phase === "done" && "Complete"}
+          </div>
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-2">
+            <div
+              className="bg-indigo-600 h-2 rounded-full transition-all"
+              style={{ width: `${Math.round((progress.completed / progress.total) * 100)}%` }}
+            />
+          </div>
+          <div className="text-xs text-gray-500">
+            {progress.completed} / {progress.total} proposals
+          </div>
+          {progress.errors.length > 0 && (
+            <div className="mt-3 text-xs text-red-600 dark:text-red-400">
+              {progress.errors.length} error{progress.errors.length !== 1 ? "s" : ""}:{" "}
+              {progress.errors.map((e) => e.name).join(", ")}
+            </div>
+          )}
+        </div>
+      )}
+
+      {loadingPast && (
+        <div className="text-sm text-gray-400 py-4">Loading past reviews...</div>
+      )}
+
+      {!loadingPast && results.length > 0 && (
+        <div className="mt-4">
+          <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+            {results.length} review{results.length !== 1 ? "s" : ""}
+          </div>
+          {results.map((r) => (
+            <ShortlistReviewCard
+              key={r.proposalId}
+              proposalId={r.proposalId}
+              orgName={r.orgName}
+              country={r.country}
+              totalScore={r.totalScore}
+              modelUsed={r.modelUsed}
+              review={r.review as never}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
 
 interface Panelist {
   id: string;
@@ -201,6 +323,12 @@ export default function Home() {
         >
           Country
         </button>
+        <button
+          onClick={() => { setActiveTab("shortlist"); setSelectedProposalId(null); }}
+          className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "shortlist" ? "border-black dark:border-white text-black dark:text-white" : "border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}
+        >
+          Shortlist Review
+        </button>
       </div>
 
       {/* Batch tab */}
@@ -334,6 +462,16 @@ export default function Home() {
 
       {/* Analytics tab */}
       {activeTab === "analytics" && <AnalyticsDashboard />}
+
+      {/* Shortlist Review tab */}
+      {activeTab === "shortlist" && (
+        <ShortlistTab
+          batchId={selectedBatchId}
+          onBatchChange={setSelectedBatchId}
+          accessToken={accessToken}
+          tokenRef={tokenRef}
+        />
+      )}
 
       {/* Panelist selection modal */}
       {showPanelistModal && (

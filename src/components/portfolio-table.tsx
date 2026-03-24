@@ -2,17 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-
-// ── Shared constants for export ──
-const DIM_DEFS: Record<string, string[]> = {
-  government_depth: ["named_counterparts", "documented_engagement", "institutional_home", "government_delivery_roles"],
-  adoption_readiness: ["transition_logic", "capacity_shift", "adoption_timeline"],
-  cost_realism: ["pilot_unit_cost", "cost_ownership_trajectory", "steady_state_fiscal"],
-  innovation_quality: ["problem_solution_fit", "operational_clarity", "pilot_learning_architecture", "team_timeline_realism"],
-  evidence_strength: ["decision_useful_evidence", "government_decision_mechanisms", "learning_outcome_evidence_chain"],
-};
-
-const DIM_MAX: Record<string, number> = { government_depth: 20, adoption_readiness: 15, cost_realism: 15, innovation_quality: 20, evidence_strength: 15 };
+import { DIM_DEFS, VALID_SUB_KEYS, computeAdjustedTotals } from "@/lib/scoring-utils";
+import type { CallJson, TotalsResult } from "@/lib/scoring-utils";
 
 const DIM_LABELS: Record<string, string> = {
   government_depth: "Government Depth", adoption_readiness: "Adoption Readiness", cost_realism: "Cost Realism",
@@ -96,35 +87,6 @@ interface BatchOption {
   created_at: string;
 }
 
-// ── Typing for classifier JSON blobs ──
-type DimData = Record<string, { score?: number; interpretation?: string; extract?: string; rubric_anchor?: string }> | undefined;
-
-interface GateEntry {
-  pass?: boolean;
-  score: number;
-  interpretation?: string;
-}
-
-interface CallJson {
-  gates?: Record<string, GateEntry>;
-  dimensions?: {
-    government_depth?: DimData;
-    adoption_readiness?: DimData;
-    cost_realism?: DimData;
-    innovation_quality?: DimData;
-    evidence_strength?: DimData;
-    [key: string]: DimData;
-  };
-  pilot_financials?: {
-    cost_til?: number | null;
-    cost_applicant?: number | null;
-    cost_government_inkind?: number | null;
-    total_teachers?: number | null;
-  };
-  consistency_notes?: string[];
-  recommendation?: string;
-  summary?: string;
-}
 
 interface OverrideHistoryEntry {
   proposal_id: string;
@@ -165,11 +127,6 @@ interface RawProposalRow {
   }[] | null;
 }
 
-interface TotalsResult {
-  dims: Record<string, number>;
-  total: number;
-  rec: string;
-}
 
 interface ExportProposal {
   org_name: string;
@@ -185,34 +142,9 @@ interface PortfolioTableProps {
   onBatchChange: (batchId: string | null) => void;
 }
 
-// ── Export helpers ──
-function getDimScaled(dimData: DimData, dimKey: string, overrides: Record<string, number>): number {
-  if (!dimData) return 0;
-  const raw = DIM_DEFS[dimKey].reduce((sum, sub) => {
-    const key = `${dimKey}.${sub}`;
-    return sum + (overrides[key] ?? dimData[sub]?.score ?? 0);
-  }, 0);
-  return Math.round((raw / DIM_MAX[dimKey]) * 20);
-}
-
-function computeTotals(call1: CallJson | null | undefined, call2: CallJson | null | undefined, overrides: Record<string, number>): TotalsResult {
-  if (!call1) return { dims: {} as Record<string, number>, total: 0, rec: "Fail" };
-  const d1 = call1.dimensions;
-  const d2 = call2?.dimensions;
-  const dims: Record<string, number> = {
-    government_depth: getDimScaled(d1?.government_depth, "government_depth", overrides),
-    adoption_readiness: getDimScaled(d1?.adoption_readiness, "adoption_readiness", overrides),
-    cost_realism: getDimScaled(d1?.cost_realism, "cost_realism", overrides),
-    innovation_quality: d2 ? getDimScaled(d2.innovation_quality, "innovation_quality", overrides) : 0,
-    evidence_strength: d2 ? getDimScaled(d2.evidence_strength, "evidence_strength", overrides) : 0,
-  };
-  const total = Object.values(dims).reduce((s, v) => s + v, 0);
-  let rec = "Fail";
-  if (total >= 85) rec = "Excellent";
-  else if (total >= 75) rec = "Good";
-  else if (total >= 60) rec = "Weak";
-  return { dims, total, rec };
-}
+// getDimScaled and computeAdjustedTotals imported from @/lib/scoring-utils
+// Local alias for backward compatibility in this file
+const computeTotals = computeAdjustedTotals;
 
 function generateExportHTML(proposal: ExportProposal, call1: CallJson, call2: CallJson | null | undefined, totals: TotalsResult, latestOverrides: Record<string, number>, overrideHistory: OverrideHistoryEntry[]) {
   const gates = call1.gates || {};
@@ -394,12 +326,15 @@ export function PortfolioTable({ onSelectProposal, panelistId, panelistName, bat
         .in("proposal_id", proposalIds);
 
       // Count distinct sub_criterion_keys per proposal + build override maps
+      // Only count dimension sub-criteria (not gate keys) for the reviewed count
       const reviewedMap = new Map<string, Set<string>>();
       const overrideScoreMap = new Map<string, Record<string, number>>();
       for (const o of (overrides || [])) {
-        const set = reviewedMap.get(o.proposal_id) || new Set();
-        set.add(o.sub_criterion_key);
-        reviewedMap.set(o.proposal_id, set);
+        if (VALID_SUB_KEYS.has(o.sub_criterion_key)) {
+          const set = reviewedMap.get(o.proposal_id) || new Set();
+          set.add(o.sub_criterion_key);
+          reviewedMap.set(o.proposal_id, set);
+        }
         // Track latest override score per sub-criterion per proposal
         const scores = overrideScoreMap.get(o.proposal_id) || {};
         scores[o.sub_criterion_key] = o.override_score;
