@@ -33,10 +33,16 @@ export async function runBatch(
   batchId: string,
   folders: InnovatorFolder[],
   getAccessToken: () => string,
-  onProgress: ProgressCallback
+  onProgress: ProgressCallback,
+  selectedFolderIds?: Set<string>
 ): Promise<void> {
+  // Filter to selected folders if specified
+  const activeFolders = selectedFolderIds
+    ? folders.filter((f) => selectedFolderIds.has(f.folderId))
+    : folders;
+
   const progress: BatchProgress = {
-    total: folders.length,
+    total: activeFolders.length,
     completed: 0,
     currentOrg: "",
     currentStep: "",
@@ -74,8 +80,8 @@ export async function runBatch(
   // ──────────────────────────────────────────────
   const toScore: PreDownloaded[] = [];
 
-  for (let i = 0; i < folders.length; i++) {
-    const folder = folders[i];
+  for (let i = 0; i < activeFolders.length; i++) {
+    const folder = activeFolders[i];
 
     if (!folder.proposalPdf) {
       progress.errors.push({ org: folder.folderName, error: "No proposal PDF detected" });
@@ -92,7 +98,7 @@ export async function runBatch(
     }
 
     progress.currentOrg = folder.folderName;
-    progress.currentStep = `Downloading files (${toScore.length + 1} of ~${folders.length - progress.completed - scoredFolderIds.size})...`;
+    progress.currentStep = `Downloading files (${toScore.length + 1} of ~${activeFolders.length - progress.completed - scoredFolderIds.size})...`;
     onProgress({ ...progress });
 
     try {
