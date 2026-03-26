@@ -160,6 +160,10 @@ export default function Home() {
   const [runCount, setRunCount] = useState(1);
   const [resumableBatches, setResumableBatches] = useState<{ id: string; name: string; total: number; scored: number; errored: number; erroredNames: string[] }[]>([]);
   const [selectedResumeBatchId, setSelectedResumeBatchId] = useState<string | null>(null);
+  const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set());
+  const [matchedBatch, setMatchedBatch] = useState<{ id: string; name: string; scored: number; errored: number; newCount: number } | null>(null);
+  const [allBatches, setAllBatches] = useState<{ id: string; name: string }[]>([]);
+  const [addToBatchId, setAddToBatchId] = useState<string | null>(null);
   const { accessToken } = useGoogleAuth();
   const runningRef = useRef(false);
   const tokenRef = useRef(accessToken);
@@ -202,10 +206,80 @@ export default function Home() {
       const { data } = await supabase.from("panelists").select("id, name").order("name");
       if (data) setPanelists(data);
 
+      // Load all batches for the dropdown
+      const { data: batchList } = await supabase.from("batches").select("id, name").order("created_at", { ascending: false });
+      if (batchList) setAllBatches(batchList);
+
       await loadResumableBatches();
     }
     init();
   }, [loadResumableBatches]);
+
+  // Auto-detect matching batch and set default selections when folders are scanned
+  useEffect(() => {
+    if (!folders || folders.length === 0) return;
+    const foldersSnapshot = folders; // narrow for async closure
+
+    async function detectBatch() {
+      // Find batches that used this same root folder
+      const { data: matches } = await supabase
+        .from("batches")
+        .select("id, name")
+        .eq("gdrive_root_folder_id", rootFolderId)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (matches && matches.length > 0) {
+        const batch = matches[0];
+        // Count proposals in this batch
+        const { data: proposals } = await supabase
+          .from("proposals")
+          .select("gdrive_folder_id, status")
+          .eq("batch_id", batch.id);
+
+        const scoredFolders = new Set<string>();
+        const erroredFolders = new Set<string>();
+        if (proposals) {
+          for (const p of proposals) {
+            if (p.status === "scored" || p.status === "in_review" || p.status === "finalized") {
+              scoredFolders.add(p.gdrive_folder_id);
+            } else if (p.status === "error") {
+              erroredFolders.add(p.gdrive_folder_id);
+            }
+          }
+        }
+
+        const newFolders = foldersSnapshot.filter(
+          (f) => f.proposalPdf && !scoredFolders.has(f.folderId) && !erroredFolders.has(f.folderId)
+        );
+
+        setMatchedBatch({
+          id: batch.id,
+          name: batch.name,
+          scored: scoredFolders.size,
+          errored: erroredFolders.size,
+          newCount: newFolders.length,
+        });
+        setAddToBatchId(batch.id);
+
+        // Default selection: new + errored checked, scored unchecked
+        const defaultSelected = new Set<string>();
+        for (const f of foldersSnapshot) {
+          if (!f.proposalPdf) continue;
+          if (scoredFolders.has(f.folderId)) continue; // skip already scored
+          defaultSelected.add(f.folderId);
+        }
+        setSelectedFolderIds(defaultSelected);
+      } else {
+        setMatchedBatch(null);
+        setAddToBatchId(null);
+        // No matching batch — select all ready folders
+        const allReady = new Set(foldersSnapshot.filter((f) => f.proposalPdf).map((f) => f.folderId));
+        setSelectedFolderIds(allReady);
+      }
+    }
+    detectBatch();
+  }, [folders, rootFolderId]);
 
   useEffect(() => {
     if ((activeTab === "review" || activeTab === "longitudinal") && !currentPanelist) {
@@ -218,24 +292,32 @@ export default function Home() {
     setShowPanelistModal(false);
   }
 
-  async function handleStartBatch() {
+  async function handleStartBatch(useExistingBatchId?: string) {
     if (!accessToken || !folders || runningRef.current) return;
+    if (selectedFolderIds.size === 0) return;
     runningRef.current = true;
     setBatchRunning(true);
 
     try {
-      for (let run = 1; run <= runCount; run++) {
-        const name = runCount > 1 ? `${batchName} — Run ${run}` : batchName;
-        const { data: batch, error: batchErr } = await supabase
-          .from("batches")
-          .insert({ name, gdrive_root_folder_id: rootFolderId, classifier_version: "v3.4", status: "scoring" })
-          .select("id")
-          .single();
+      if (useExistingBatchId) {
+        // Add selected proposals to existing batch
+        await runBatch(useExistingBatchId, folders, () => tokenRef.current!, (progress) => {
+          setBatchProgress({ ...progress });
+        }, selectedFolderIds);
+      } else {
+        for (let run = 1; run <= runCount; run++) {
+          const name = runCount > 1 ? `${batchName} — Run ${run}` : batchName;
+          const { data: batch, error: batchErr } = await supabase
+            .from("batches")
+            .insert({ name, gdrive_root_folder_id: rootFolderId, classifier_version: "v3.4", status: "scoring" })
+            .select("id")
+            .single();
 
-        if (batchErr || !batch) throw new Error(batchErr?.message || "Failed to create batch");
-        await runBatch(batch.id, folders, () => tokenRef.current!, (progress) => {
-          setBatchProgress({ ...progress, runLabel: runCount > 1 ? `Run ${run} of ${runCount}` : undefined });
-        });
+          if (batchErr || !batch) throw new Error(batchErr?.message || "Failed to create batch");
+          await runBatch(batch.id, folders, () => tokenRef.current!, (progress) => {
+            setBatchProgress({ ...progress, runLabel: runCount > 1 ? `Run ${run} of ${runCount}` : undefined });
+          }, selectedFolderIds);
+        }
       }
     } catch (err: unknown) {
       console.error("Batch error:", err instanceof Error ? err.message : String(err));
@@ -262,8 +344,6 @@ export default function Home() {
       loadResumableBatches(); // refresh the list
     }
   }
-
-  const readyCount = folders ? folders.filter((f) => f.proposalPdf).length : 0;
 
   return (
     <main className="max-w-7xl mx-auto p-10 font-mono bg-white dark:bg-gray-950 text-black dark:text-gray-100 min-h-screen">
@@ -339,9 +419,47 @@ export default function Home() {
           )}
           {folders && !batchRunning && !batchProgress && (
             <>
-              <PreflightTable folders={folders} />
+              <PreflightTable
+                folders={folders}
+                selectedFolderIds={selectedFolderIds}
+                onSelectionChange={setSelectedFolderIds}
+                matchedBatch={matchedBatch}
+              />
               <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700">
-                <label className="block text-sm font-medium mb-1">Batch Name</label>
+                {/* Add to existing batch */}
+                {matchedBatch && (
+                  <div className="mb-4 p-3 bg-indigo-50 dark:bg-indigo-950/30 rounded border border-indigo-200 dark:border-indigo-800">
+                    <div className="text-sm font-medium text-indigo-800 dark:text-indigo-300 mb-2">
+                      Add to existing batch
+                    </div>
+                    <select
+                      value={addToBatchId || ""}
+                      onChange={(e) => setAddToBatchId(e.target.value || null)}
+                      className="rounded border border-indigo-300 dark:border-indigo-700 px-3 py-2 text-sm mb-3 w-full max-w-lg bg-white dark:bg-gray-800 dark:text-gray-100"
+                    >
+                      <option value="">Select a batch...</option>
+                      {allBatches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}{b.id === matchedBatch.id ? " (auto-detected)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <div>
+                      <button
+                        onClick={() => addToBatchId && handleStartBatch(addToBatchId)}
+                        disabled={selectedFolderIds.size === 0 || !addToBatchId}
+                        className="rounded bg-indigo-600 px-6 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        Add {selectedFolderIds.size} Proposal{selectedFolderIds.size !== 1 ? "s" : ""} to Batch
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Create new batch */}
+                <label className="block text-sm font-medium mb-1">
+                  {matchedBatch ? "Or create a new batch" : "Batch Name"}
+                </label>
                 <input
                   type="text"
                   value={batchName}
@@ -359,13 +477,13 @@ export default function Home() {
                 />
                 <div className="flex items-center gap-4">
                   <button
-                    onClick={handleStartBatch}
-                    disabled={readyCount === 0}
+                    onClick={() => handleStartBatch()}
+                    disabled={selectedFolderIds.size === 0}
                     className="rounded bg-green-600 px-6 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
                   >
-                    Start {runCount > 1 ? `${runCount} Runs` : "Batch"} ({readyCount} proposals each)
+                    Create New Batch ({selectedFolderIds.size} proposal{selectedFolderIds.size !== 1 ? "s" : ""})
                   </button>
-                  <button onClick={() => setFolders(null)} className="text-sm text-gray-500 underline">
+                  <button onClick={() => { setFolders(null); setMatchedBatch(null); setAddToBatchId(null); }} className="text-sm text-gray-500 underline">
                     Reset scan
                   </button>
                 </div>
