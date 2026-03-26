@@ -24,3 +24,11 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Force light mode for profile builder regardless of OS preference */
+.profile-builder {
+  --background: #ffffff;
+  --foreground: #171717;
+  background: #ffffff;
+  color: #171717;
+}
