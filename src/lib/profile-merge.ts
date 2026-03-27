@@ -1,12 +1,12 @@
-import { InnovatorProfile, Organisation, GovernmentRelationship, EvidenceStat, Quote } from './profile-types';
+import { Innovation, Innovator, GovernmentRelationship, EvidenceStat } from './profile-types';
 
 export function smartMergeOrg(
-  existing: Organisation,
-  extracted: Organisation
-): { merged: Organisation; updatedFields: string[] } {
+  existing: Innovator,
+  extracted: Innovator
+): { merged: Innovator; updatedFields: string[] } {
   const merged = { ...existing };
   const updatedFields: string[] = [];
-  const keys = ['name', 'country', 'founded_year', 'team_size', 'african_led'] as const;
+  const keys = ['name', 'country', 'founded_year', 'team_size', 'african_led', 'org_type', 'track_record_description'] as const;
 
   for (const key of keys) {
     const oldVal = existing[key];
@@ -25,16 +25,20 @@ export function smartMergeOrg(
 }
 
 export function smartMergeInnovation(
-  existing: InnovatorProfile,
-  extracted: InnovatorProfile
-): { merged: InnovatorProfile; updatedFields: string[] } {
+  existing: Innovation,
+  extracted: Innovation
+): { merged: Innovation; updatedFields: string[] } {
   const merged = { ...existing };
   const updatedFields: string[] = [];
 
   const scalarKeys = [
-    'theme', 'insight',
-    'cost_per_teacher_now', 'cost_per_teacher_scale', 'funding_gap',
-    'stage',
+    'name', 'theme',
+    'problem_statement', 'opportunity_statement',
+    'cost_per_teacher_now', 'cost_per_teacher_scale', 'marginal_cost_at_scale',
+    'funding_ask_base', 'funding_ask_duration',
+    'stage', 'evidence_status',
+    'maturity_demonstrated', 'pilot_scope',
+    'quote', 'quote_attribution',
   ] as const;
 
   for (const key of scalarKeys) {
@@ -64,7 +68,7 @@ export function smartMergeInnovation(
     }
   }
 
-  // Evidence stats: append new (dedup), cap at 3
+  // Evidence stats: append new (dedup), cap at 4
   if (extracted.evidence_stats.length > 0) {
     const existingKeys = new Set(
       existing.evidence_stats.map((s) => `${s.number}::${s.label}`.toLowerCase())
@@ -73,7 +77,7 @@ export function smartMergeInnovation(
       (s) => !existingKeys.has(`${s.number}::${s.label}`.toLowerCase())
     );
     if (newStats.length > 0) {
-      merged.evidence_stats = [...existing.evidence_stats, ...newStats].slice(0, 3);
+      merged.evidence_stats = [...existing.evidence_stats, ...newStats].slice(0, 4);
       updatedFields.push('evidence_stats');
     }
   }
@@ -86,16 +90,16 @@ export function smartMergeInnovation(
     }
   }
 
-  // Quotes: append new (dedup by text)
-  if (extracted.quotes.length > 0) {
-    const existingTexts = new Set(existing.quotes.map((q) => q.text.toLowerCase().trim()));
-    const newQuotes: Quote[] = extracted.quotes.filter(
-      (q) => q.text && !existingTexts.has(q.text.toLowerCase().trim())
-    );
-    if (newQuotes.length > 0) {
-      merged.quotes = [...existing.quotes, ...newQuotes];
-      updatedFields.push('quotes');
-    }
+  // Adoption pathway bullets: replace if different and existing is empty
+  if (extracted.adoption_pathway_bullets.length > 0 && existing.adoption_pathway_bullets.length === 0) {
+    merged.adoption_pathway_bullets = extracted.adoption_pathway_bullets;
+    updatedFields.push('adoption_pathway_bullets');
+  }
+
+  // Funding covers: replace if different and existing is empty
+  if (extracted.funding_covers.length > 0 && existing.funding_covers.length === 0) {
+    merged.funding_covers = extracted.funding_covers;
+    updatedFields.push('funding_covers');
   }
 
   // Merge confidence flags
@@ -115,13 +119,13 @@ export function smartMergeInnovation(
 
 /** Convenience wrapper that merges both org and innovation */
 export function smartMergeFull(
-  existingOrg: Organisation,
-  existingProfile: InnovatorProfile,
-  extractedOrg: Organisation,
-  extractedProfile: InnovatorProfile
+  existingOrg: Innovator,
+  existingProfile: Innovation,
+  extractedOrg: Innovator,
+  extractedProfile: Innovation
 ): {
-  mergedOrg: Organisation;
-  mergedProfile: InnovatorProfile;
+  mergedOrg: Innovator;
+  mergedProfile: Innovation;
   updatedFields: string[];
 } {
   const orgResult = smartMergeOrg(existingOrg, extractedOrg);

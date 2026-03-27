@@ -1,12 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { InnovatorProfile, Organisation } from '@/lib/profile-types';
+import { Innovation, Innovator } from '@/lib/profile-types';
 
 interface Props {
-  organisation: Organisation;
+  organisation: Innovator;
   orgId: string | null;
-  profile: InnovatorProfile;
+  profile: Innovation;
   submitted: boolean;
   onSubmit: (orgId: string) => void;
   onBack: () => void;
@@ -39,15 +39,15 @@ export default function SubmitStep({ organisation, orgId, profile, submitted, on
       const res = await fetch('/api/profile-submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile, organisation_id: resolvedOrgId }),
+        body: JSON.stringify({ profile, organisation_id: resolvedOrgId, organisation }),
       });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || 'Save failed');
       }
-      const { id } = await res.json();
+      const { id, innovator_id } = await res.json();
       setProfileId(id);
-      onSubmit(resolvedOrgId!);
+      onSubmit(innovator_id || resolvedOrgId!);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
     } finally {
@@ -89,6 +89,10 @@ export default function SubmitStep({ organisation, orgId, profile, submitted, on
             <span>{organisation.country || '—'}</span>
           </div>
           <div className="flex justify-between">
+            <span className="text-gray-500">Innovation</span>
+            <span className="font-medium">{profile.name || '(unnamed)'}</span>
+          </div>
+          <div className="flex justify-between">
             <span className="text-gray-500">Stage</span>
             <span>{profile.stage || '—'}</span>
           </div>
@@ -102,12 +106,12 @@ export default function SubmitStep({ organisation, orgId, profile, submitted, on
           </div>
           {orgId ? (
             <div className="flex justify-between">
-              <span className="text-gray-500">Organisation</span>
+              <span className="text-gray-500">Innovator</span>
               <span className="text-xs text-emerald-600">Existing (will link)</span>
             </div>
           ) : (
             <div className="flex justify-between">
-              <span className="text-gray-500">Organisation</span>
+              <span className="text-gray-500">Innovator</span>
               <span className="text-xs text-amber-600">New (will be created)</span>
             </div>
           )}

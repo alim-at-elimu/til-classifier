@@ -1,30 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { Organisation, InnovatorProfile } from '@/lib/profile-types';
+import { Innovator, Innovation } from '@/lib/profile-types';
 import { getAnthropicKey } from '@/lib/anthropic-key';
 
 export const maxDuration = 300;
 
 const AUGMENTATION_PROMPT = `You are augmenting an education innovator profile with web search results.
 
-You receive an organisation object and an innovation profile. Search the web and fill in null/empty fields.
+You receive an innovator object and an innovation profile. Search the web and fill in null/empty fields.
 
 Rules:
 1. Only fill fields that are currently null or empty.
 2. Return JSON with three keys:
-   - "org_updates": object with updated organisation fields only
+   - "org_updates": object with updated innovator fields only
    - "innovation_updates": object with updated innovation fields only
    - "web_augmented_fields": array of field names filled from web
 3. Do NOT change fields that already have values.
-4. NEVER fill quotes from web sources. Quotes must come only from submitted documents.
+4. NEVER fill quote or quote_attribution from web sources. Quotes must come only from submitted documents.
 5. For government_relationships: do NOT duplicate existing entries.
-6. Return ONLY valid JSON.`;
+6. NEVER fill human-only fields: investment_thesis, maturity_to_validate, maturity_outlook, ask_for_funders, ask_for_governments, ask_funder_outcome, evidence_interpretation.
+7. Return ONLY valid JSON.`;
 
 export async function POST(req: NextRequest) {
   try {
     const { organisation, profile } = (await req.json()) as {
-      organisation: Organisation;
-      profile: InnovatorProfile;
+      organisation: Innovator;
+      profile: Innovation;
     };
 
     if (!organisation || !profile) {
@@ -46,26 +47,35 @@ export async function POST(req: NextRequest) {
     }
 
     const nullInnoFields: string[] = [];
-    const scalarKeys = ['theme', 'insight', 'cost_per_teacher_now', 'cost_per_teacher_scale', 'funding_gap', 'stage'] as const;
+    // Exclude human-only fields from web fill
+    const scalarKeys = [
+      'theme', 'problem_statement', 'opportunity_statement', 'evidence_status',
+      'cost_per_teacher_now', 'cost_per_teacher_scale', 'marginal_cost_at_scale',
+      'funding_ask_base', 'funding_ask_duration',
+      'stage', 'maturity_demonstrated', 'pilot_scope',
+    ] as const;
     for (const k of scalarKeys) {
-      if (profile[k] === null || profile[k] === undefined) nullInnoFields.push(k);
+      const val = (profile as unknown as Record<string, unknown>)[k] ?? (organisation as unknown as Record<string, unknown>)[k];
+      if (val === null || val === undefined) nullInnoFields.push(k);
     }
     if (profile.model_steps.length === 0) nullInnoFields.push('model_steps');
     if (profile.evidence_stats.length === 0) nullInnoFields.push('evidence_stats');
     if (profile.government_relationships.length === 0) nullInnoFields.push('government_relationships');
+    if (profile.adoption_pathway_bullets.length === 0) nullInnoFields.push('adoption_pathway_bullets');
+    if (profile.funding_covers.length === 0) nullInnoFields.push('funding_covers');
 
     if (nullOrgFields.length === 0 && nullInnoFields.length === 0) {
       return NextResponse.json({ organisation, profile });
     }
 
     const response = await client.messages.create({
-      model: 'claude-opus-4-20250514',
+      model: 'claude-opus-4-6',
       max_tokens: 4096,
       system: AUGMENTATION_PROMPT,
       tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
       messages: [{
         role: 'user',
-        content: `Organisation: ${JSON.stringify(organisation)}
+        content: `Innovator: ${JSON.stringify(organisation)}
 Innovation profile: ${JSON.stringify(profile)}
 Null org fields: ${nullOrgFields.join(', ')}
 Null innovation fields: ${nullInnoFields.join(', ')}
@@ -101,13 +111,14 @@ Search for "${orgName}" ${organisation.country || ''} education and augment. Ret
 
       // Apply innovation updates (with dedup for arrays)
       const augProfile = { ...profile };
+      const humanOnlyFields = new Set(['investment_thesis', 'maturity_to_validate', 'maturity_outlook', 'ask_for_funders', 'ask_for_governments', 'ask_funder_outcome', 'evidence_interpretation', 'quote', 'quote_attribution']);
       for (const [k, v] of Object.entries(innoUpdates)) {
-        if (k === 'quotes') continue; // Never from web
+        if (humanOnlyFields.has(k)) continue; // Never from web
         if (k === 'government_relationships' && Array.isArray(v)) {
           const existing = new Set(
             profile.government_relationships.map((g) => `${g.country}::${g.ministry}`.toLowerCase())
           );
-          const newRels = (v as InnovatorProfile['government_relationships']).filter(
+          const newRels = (v as Innovation['government_relationships']).filter(
             (g) => !existing.has(`${g.country}::${g.ministry}`.toLowerCase())
           );
           if (newRels.length > 0) {
