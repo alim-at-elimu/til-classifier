@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { AssessedFile, InnovatorProfile, Organisation, emptyProfile, emptyOrganisation } from '@/lib/profile-types';
+import { AssessedFile, Innovation, Innovator, emptyInnovation, emptyInnovator } from '@/lib/profile-types';
 
 interface Props {
   files: AssessedFile[];
-  onComplete: (org: Organisation, profile: InnovatorProfile) => void;
+  onComplete: (innovator: Innovator, innovation: Innovation) => void;
   onBack: () => void;
 }
 
@@ -15,8 +15,8 @@ export default function ExtractionStep({ files, onComplete, onBack }: Props) {
   const [phase, setPhase] = useState<Phase>('extracting');
   const [message, setMessage] = useState('Preparing files for extraction…');
   const [error, setError] = useState('');
-  const [org, setOrg] = useState<Organisation | null>(null);
-  const [profile, setProfile] = useState<InnovatorProfile | null>(null);
+  const [innovator, setInnovator] = useState<Innovator | null>(null);
+  const [innovation, setInnovation] = useState<Innovation | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,15 +41,18 @@ export default function ExtractionStep({ files, onComplete, onBack }: Props) {
         const extractData = await extractRes.json();
         if (cancelled) return;
 
-        let extractedOrg: Organisation = extractData.organisation || emptyOrganisation();
-        let extractedProfile: InnovatorProfile = {
-          ...emptyProfile(),
-          ...extractData.profile,
-          model_steps: extractData.profile?.model_steps || [],
-          evidence_stats: extractData.profile?.evidence_stats || [],
-          government_relationships: extractData.profile?.government_relationships || [],
-          quotes: extractData.profile?.quotes || [],
-          confidence_flags: extractData.profile?.confidence_flags || [],
+        let extractedInnovator: Innovator = extractData.innovator || extractData.organisation || emptyInnovator();
+        let extractedInnovation: Innovation = {
+          ...emptyInnovation(),
+          ...(extractData.innovation || extractData.profile || {}),
+          model_steps: extractData.innovation?.model_steps || extractData.profile?.model_steps || [],
+          evidence_stats: extractData.innovation?.evidence_stats || extractData.profile?.evidence_stats || [],
+          government_relationships: extractData.innovation?.government_relationships || extractData.profile?.government_relationships || [],
+          adoption_pathway_bullets: extractData.innovation?.adoption_pathway_bullets || extractData.profile?.adoption_pathway_bullets || [],
+          funding_covers: extractData.innovation?.funding_covers || extractData.profile?.funding_covers || [],
+          confidence_flags: extractData.innovation?.confidence_flags || extractData.profile?.confidence_flags || [],
+          web_augmented_fields: [],
+          file_updated_fields: [],
         };
 
         // Web search augmentation
@@ -59,18 +62,18 @@ export default function ExtractionStep({ files, onComplete, onBack }: Props) {
         const searchRes = await fetch('/api/profile-search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ organisation: extractedOrg, profile: extractedProfile }),
+          body: JSON.stringify({ organisation: extractedInnovator, profile: extractedInnovation }),
         });
 
         if (searchRes.ok) {
           const searchData = await searchRes.json();
-          if (searchData.organisation) extractedOrg = searchData.organisation;
-          if (searchData.profile) extractedProfile = { ...extractedProfile, ...searchData.profile };
+          if (searchData.organisation) extractedInnovator = searchData.organisation;
+          if (searchData.profile) extractedInnovation = { ...extractedInnovation, ...searchData.profile };
         }
 
         if (!cancelled) {
-          setOrg(extractedOrg);
-          setProfile(extractedProfile);
+          setInnovator(extractedInnovator);
+          setInnovation(extractedInnovation);
           setPhase('done');
         }
       } catch (err) {
@@ -93,20 +96,20 @@ export default function ExtractionStep({ files, onComplete, onBack }: Props) {
     );
   }
 
-  if (phase === 'done' && org && profile) {
+  if (phase === 'done' && innovator && innovation) {
     return (
       <div className="mx-auto max-w-2xl">
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-6">
           <p className="text-sm font-medium text-emerald-800">Extraction complete</p>
           <p className="mt-1 text-sm text-emerald-600">
-            {org.name ? `Profile for "${org.name}"` : 'Profile'} extracted
-            {profile.confidence_flags.length > 0 && ` with ${profile.confidence_flags.length} field(s) flagged for review`}
-            {profile.web_augmented_fields.length > 0 && ` and ${profile.web_augmented_fields.length} field(s) from web`}.
+            {innovator.name ? `Profile for "${innovator.name}"` : 'Profile'} extracted
+            {innovation.confidence_flags.length > 0 && ` with ${innovation.confidence_flags.length} field(s) flagged for review`}
+            {innovation.web_augmented_fields.length > 0 && ` and ${innovation.web_augmented_fields.length} field(s) from web`}.
           </p>
         </div>
         <div className="mt-6 flex items-center justify-between">
           <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-700">← Back</button>
-          <button onClick={() => onComplete(org, profile)} className="rounded-lg bg-amber-500 px-6 py-2.5 text-sm font-medium text-white hover:bg-amber-600">Review tear sheet →</button>
+          <button onClick={() => onComplete(innovator, innovation)} className="rounded-lg bg-amber-500 px-6 py-2.5 text-sm font-medium text-white hover:bg-amber-600">Review tear sheet →</button>
         </div>
       </div>
     );

@@ -7,15 +7,17 @@ export async function POST(req: NextRequest) {
     if (!id || !organisation) return NextResponse.json({ error: 'Missing id or organisation' }, { status: 400 });
 
     const { url, key } = getSupabaseConfig();
-    const res = await fetch(`${url}/rest/v1/organisations?id=eq.${id}`, {
+    const res = await fetch(`${url}/rest/v1/innovators?id=eq.${id}`, {
       method: 'PATCH',
       headers: { ...supabaseHeaders(key), Prefer: 'return=representation' },
       body: JSON.stringify({
         name: organisation.name,
         country: organisation.country,
+        org_type: organisation.org_type,
         founded_year: organisation.founded_year,
         team_size: organisation.team_size,
         african_led: organisation.african_led,
+        track_record_description: organisation.track_record_description,
       }),
     });
 

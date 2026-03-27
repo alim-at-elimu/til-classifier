@@ -5,11 +5,17 @@ import {
   WorkflowStep,
   UploadedFile,
   AssessedFile,
-  InnovatorProfile,
-  Organisation,
-  emptyProfile,
-  emptyOrganisation,
+  Innovation,
+  Innovator,
+  emptyInnovation,
+  emptyInnovator,
 } from '@/lib/profile-types';
+
+// Legacy type aliases used within this file
+type InnovatorProfile = Innovation;
+type Organisation = Innovator;
+const emptyProfile = emptyInnovation;
+const emptyOrganisation = emptyInnovator;
 import FileUpload from '@/components/profile-builder/file-upload';
 import FileAssessment from '@/components/profile-builder/file-assessment';
 import ExtractionStep from '@/components/profile-builder/extraction-step';
@@ -21,7 +27,7 @@ import { smartMergeFull } from '@/lib/profile-merge';
 
 type View = 'new' | 'repository' | 'edit';
 
-const STEP_LABELS: Record<WorkflowStep, string> = {
+const STEP_LABELS: Record<number, string> = {
   0: 'Organisation',
   1: 'Upload',
   2: 'Assess',
@@ -32,7 +38,7 @@ const STEP_LABELS: Record<WorkflowStep, string> = {
 
 export default function ProfileBuilderPage() {
   const [view, setView] = useState<View>('new');
-  const [step, setStep] = useState<WorkflowStep>(0);
+  const [step, setStep] = useState<number>(0);
   const [organisation, setOrganisation] = useState<Organisation>(emptyOrganisation());
   const [orgId, setOrgId] = useState<string | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
@@ -69,14 +75,14 @@ export default function ProfileBuilderPage() {
     setStep(3);
   }, []);
 
-  const handleExtractionComplete = useCallback((extractedOrg: Organisation, extractedProfile: InnovatorProfile) => {
+  const handleExtractionComplete = useCallback((extractedOrg: Innovator, extractedInnovation: Innovation) => {
     // If org was pre-selected, merge org data; otherwise use extracted
     if (orgId) {
-      setOrganisation((prev) => ({ ...prev, ...Object.fromEntries(Object.entries(extractedOrg).filter(([, v]) => v !== null && !orgId)) }));
+      setOrganisation((prev) => ({ ...prev, ...Object.fromEntries(Object.entries(extractedOrg).filter(([, v]) => v !== null)) }));
     } else {
       setOrganisation(extractedOrg);
     }
-    setProfile(extractedProfile);
+    setProfile(extractedInnovation);
     setStep(4);
   }, [orgId]);
 
@@ -130,7 +136,7 @@ export default function ProfileBuilderPage() {
           <div className="border-b border-gray-200 bg-white">
             <div className="mx-auto max-w-7xl px-6 py-3">
               <div className="flex items-center gap-1">
-                {([0, 1, 2, 3, 4, 5] as WorkflowStep[]).map((s) => (
+                {([0, 1, 2, 3, 4, 5] as number[]).map((s) => (
                   <div key={s} className="flex items-center">
                     <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${s === step ? 'bg-amber-100 text-amber-800' : s < step ? 'bg-gray-100 text-gray-600' : 'text-gray-400'}`}>
                       <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${s === step ? 'bg-amber-500 text-white' : s < step ? 'bg-gray-400 text-white' : 'bg-gray-200 text-gray-400'}`}>
@@ -151,10 +157,10 @@ export default function ProfileBuilderPage() {
             {step === 3 && <ExtractionStep files={assessedFiles} onComplete={handleExtractionComplete} onBack={() => setStep(2)} />}
             {step === 4 && (
               <TearSheet
-                organisation={organisation}
-                profile={profile}
-                onUpdateOrg={setOrganisation}
-                onUpdate={setProfile}
+                innovator={organisation}
+                innovation={profile}
+                onUpdateInnovator={setOrganisation}
+                onUpdateInnovation={setProfile}
                 onSubmit={() => setStep(5)}
                 onBack={() => setStep(3)}
               />
@@ -316,12 +322,12 @@ function EditProfileView({
   onUpdateOrg,
   onBack,
 }: {
-  profile: InnovatorProfile;
-  organisation: Organisation;
+  profile: Innovation;
+  organisation: Innovator;
   profileId: string;
   orgId: string | null;
-  onUpdate: (p: InnovatorProfile) => void;
-  onUpdateOrg: (o: Organisation) => void;
+  onUpdate: (p: Innovation) => void;
+  onUpdateOrg: (o: Innovator) => void;
   onBack: () => void;
 }) {
   const tearSheetRef = useRef<TearSheetHandle>(null);
@@ -400,7 +406,8 @@ function EditProfileView({
         model_steps: extProfile.model_steps || [],
         evidence_stats: extProfile.evidence_stats || [],
         government_relationships: extProfile.government_relationships || [],
-        quotes: extProfile.quotes || [],
+        adoption_pathway_bullets: extProfile.adoption_pathway_bullets || [],
+        funding_covers: extProfile.funding_covers || [],
         confidence_flags: extProfile.confidence_flags || [],
         file_updated_fields: [],
       };
@@ -461,10 +468,10 @@ function EditProfileView({
           </div>
           <TearSheet
             ref={tearSheetRef}
-            organisation={organisation}
-            profile={profile}
-            onUpdateOrg={onUpdateOrg}
-            onUpdate={onUpdate}
+            innovator={organisation}
+            innovation={profile}
+            onUpdateInnovator={onUpdateOrg}
+            onUpdateInnovation={onUpdate}
             onSubmit={handleSave}
             onBack={onBack}
             hideToolbar
