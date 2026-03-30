@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   WorkflowStep,
   UploadedFile,
@@ -19,7 +19,7 @@ const emptyOrganisation = emptyInnovator;
 import FileUpload from '@/components/profile-builder/file-upload';
 import FileAssessment from '@/components/profile-builder/file-assessment';
 import ExtractionStep from '@/components/profile-builder/extraction-step';
-import TearSheet from '@/components/profile-builder/tear-sheet';
+import TearSheet, { TearSheetHandle } from '@/components/profile-builder/tear-sheet';
 import InvestmentProposition from '@/components/profile-builder/investment-proposition';
 import SubmitStep from '@/components/profile-builder/submit-step';
 import Repository from '@/components/profile-builder/repository';
@@ -28,20 +28,6 @@ import { smartMergeFull } from '@/lib/profile-merge';
 import { uploadDocuments } from '@/lib/upload-documents';
 
 type View = 'new' | 'repository' | 'edit';
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-function withDocumentUrls(innovation: Innovation): Innovation {
-  if (!innovation.documents?.length) return innovation;
-  return {
-    ...innovation,
-    documents: innovation.documents.map((doc) => ({
-      ...doc,
-      path: doc.path.startsWith('http')
-        ? doc.path
-        : `${SUPABASE_URL}/storage/v1/object/public/innovation-documents/${doc.path}`,
-    })),
-  };
-}
 
 const STEP_LABELS: Record<number, string> = {
   0: 'Organisation',
@@ -180,22 +166,23 @@ export default function ProfileBuilderPage() {
             {step === 3 && <ExtractionStep files={assessedFiles} onComplete={handleExtractionComplete} onBack={() => setStep(2)} />}
             {step === 4 && (
               <div>
-                <div className="mb-4 flex items-center justify-between">
-                  <button onClick={() => setStep(3)} className="text-sm text-gray-500 hover:text-gray-700">← Back</button>
-                  <div className="flex items-center gap-3">
-                    <ViewToggle value={reviewView} onChange={setReviewView} />
-                    <button onClick={() => setStep(5)} className="rounded-lg bg-amber-500 px-5 py-2 text-sm font-medium text-white hover:bg-amber-600">Submit →</button>
-                  </div>
+                <div className="mb-4 flex justify-end">
+                  <ViewToggle value={reviewView} onChange={setReviewView} />
                 </div>
                 {reviewView === 'tear-sheet' ? (
                   <TearSheet
                     innovator={organisation}
-                    innovation={withDocumentUrls(profile)}
+                    innovation={profile}
+                    onUpdateInnovator={setOrganisation}
+                    onUpdateInnovation={setProfile}
+                    onSubmit={() => setStep(5)}
+                    onBack={() => setStep(3)}
                   />
                 ) : (
                   <InvestmentProposition
                     innovator={organisation}
                     innovation={profile}
+                    onUpdateInnovation={setProfile}
                   />
                 )}
               </div>
@@ -383,6 +370,7 @@ function EditProfileView({
   onUpdateOrg: (o: Innovator) => void;
   onBack: () => void;
 }) {
+  const tearSheetRef = useRef<TearSheetHandle>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [uploadPhase, setUploadPhase] = useState<'off' | 'select' | 'assess' | 'processing'>('off');
@@ -510,6 +498,9 @@ function EditProfileView({
             <div className="flex items-center gap-2">
               <ViewToggle value={viewMode} onChange={setViewMode} />
               <Changelog profileId={profileId} />
+              <button onClick={() => tearSheetRef.current?.exportPdf()} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                Export
+              </button>
               <button onClick={() => setUploadPhase('select')} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
                 Upload new files
               </button>
@@ -552,18 +543,20 @@ function EditProfileView({
 
           {viewMode === 'tear-sheet' ? (
             <TearSheet
+              ref={tearSheetRef}
               innovator={organisation}
-              innovation={withDocumentUrls(profile)}
-              onDeleteDocument={(fullPath) => {
-                const prefix = `${SUPABASE_URL}/storage/v1/object/public/innovation-documents/`;
-                const relativePath = fullPath.startsWith(prefix) ? fullPath.slice(prefix.length) : fullPath;
-                onUpdate({ ...profile, documents: profile.documents.filter(d => d.path !== relativePath) });
-              }}
+              innovation={profile}
+              onUpdateInnovator={onUpdateOrg}
+              onUpdateInnovation={onUpdate}
+              onSubmit={handleSave}
+              onBack={onBack}
+              hideToolbar
             />
           ) : (
             <InvestmentProposition
               innovator={organisation}
               innovation={profile}
+              onUpdateInnovation={onUpdate}
             />
           )}
         </>
