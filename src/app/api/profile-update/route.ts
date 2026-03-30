@@ -64,6 +64,7 @@ export async function POST(req: NextRequest) {
       ask_for_governments: profile.ask_for_governments,
       confidence_flags: profile.confidence_flags,
       web_augmented_fields: profile.web_augmented_fields,
+      documents: profile.documents || [],
       status: profile.status || 'draft',
     };
 

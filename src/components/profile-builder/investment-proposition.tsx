@@ -41,18 +41,20 @@ export default function InvestmentProposition({ innovator, innovation, onUpdateI
         </div>
 
         {/* Investment thesis */}
-        <div className={`mb-4 rounded border p-3 ${isHumanEmpty('investment_thesis', p.investment_thesis) ? 'border-dashed border-amber-300 bg-amber-50/40' : 'border-l-[3px] border-l-amber-400 border-gray-100 bg-amber-50/20'}`}>
-          <div className="mb-1 flex items-center gap-2">
-            <span className="text-[9px] font-semibold uppercase tracking-wider text-amber-600">Investment Thesis</span>
-            {isHumanEmpty('investment_thesis', p.investment_thesis) && <span className="text-[9px] text-red-400">Requires human input</span>}
+        {isHumanEmpty('investment_thesis', p.investment_thesis) ? (
+          <div className="mb-4 rounded border border-dashed border-amber-300 bg-amber-50/40 p-3">
+            <span className="text-[9px] italic text-amber-600">Human input required</span>
           </div>
-          <AutoTextarea
-            value={p.investment_thesis || ''}
-            onChange={(v) => set('investment_thesis', v || null)}
-            placeholder="Why is this innovator worth investing in? What makes the timing right?"
-            className="text-sm leading-relaxed text-gray-900"
-          />
-        </div>
+        ) : (
+          <div className="mb-4 rounded-lg bg-amber-50 px-4 py-3">
+            <AutoTextarea
+              value={p.investment_thesis || ''}
+              onChange={(v) => set('investment_thesis', v || null)}
+              placeholder="Why is this innovator worth investing in?"
+              className="text-sm italic leading-relaxed text-amber-900"
+            />
+          </div>
+        )}
 
         {/* Problem statement */}
         {(p.problem_statement || !isHumanEmpty('problem_statement', p.problem_statement)) && (
@@ -83,11 +85,11 @@ export default function InvestmentProposition({ innovator, innovation, onUpdateI
         {/* Model steps */}
         {p.model_steps.length > 0 && (
           <div>
-            <span className="text-[9px] font-semibold uppercase tracking-wider text-gray-400">How it works</span>
+            <span className="text-[9px] font-semibold uppercase tracking-wider text-gray-400">What is novel</span>
             <ul className="mt-1 space-y-1">
               {p.model_steps.map((step, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                  <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-100 text-[10px] font-bold text-amber-700">{i + 1}</span>
+                <li key={i} className="flex items-start gap-2 text-xs text-gray-700" style={{ lineHeight: '1.4' }}>
+                  <span className="mt-1.5 h-[5px] w-[5px] shrink-0 rounded-full bg-amber-500" />
                   <span>{step}</span>
                 </li>
               ))}
@@ -216,15 +218,21 @@ export default function InvestmentProposition({ innovator, innovation, onUpdateI
           <span className={SECTION_STYLE.label}>05 · The ask</span>
         </div>
 
-        {/* Total ask */}
-        <div className="mb-1 flex items-baseline gap-3">
-          <span className="text-2xl font-medium text-gray-900">
-            {p.funding_ask_base || '—'}
-            {p.funding_ask_base && <span className="ml-1 text-base font-normal text-gray-500">+ $100,000 for M&amp;E</span>}
-          </span>
-          {p.funding_ask_duration && <span className="text-sm text-gray-500">· {p.funding_ask_duration}</span>}
-        </div>
-        <p className="mb-4 text-[10px] text-gray-400">Includes $100,000 for independent monitoring and evaluation</p>
+        {/* Total ask — base + $100k M&E, computed at render */}
+        {(() => {
+          const raw = p.funding_ask_base || '';
+          const num = parseInt(raw.replace(/[^0-9]/g, ''), 10);
+          const total = !isNaN(num) ? `USD $${(num + 100000).toLocaleString('en-US')}` : '—';
+          return (
+            <>
+              <div className="mb-1 flex items-baseline gap-3">
+                <span className="text-2xl font-medium text-gray-900">{total}</span>
+                {p.funding_ask_duration && <span className="text-sm text-gray-500">· {p.funding_ask_duration}</span>}
+              </div>
+              <p className="mb-4 text-[11px] text-gray-400">Includes $100,000 for independent monitoring and evaluation.</p>
+            </>
+          );
+        })()}
 
         <div className="grid grid-cols-2 gap-4">
           {/* Funding covers */}

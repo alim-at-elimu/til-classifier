@@ -14,6 +14,14 @@ export interface EvidenceStat {
   source: string;
 }
 
+export interface DocumentRecord {
+  name: string;
+  path: string;
+  type: 'pdf' | 'xlsx' | 'unknown';
+  size: number;
+  uploaded_at: string;
+}
+
 export interface GovernmentRelationship {
   country: string;
   ministry: string;
@@ -64,6 +72,7 @@ export interface Innovation {
   confidence_flags: string[];
   web_augmented_fields: string[];
   file_updated_fields: string[];
+  documents: DocumentRecord[];
   status?: string;
 }
 
@@ -155,6 +164,7 @@ export function emptyInnovation(): Innovation {
     confidence_flags: [],
     web_augmented_fields: [],
     file_updated_fields: [],
+    documents: [],
     status: 'draft',
   };
 }

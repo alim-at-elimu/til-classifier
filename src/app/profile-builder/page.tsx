@@ -20,10 +20,12 @@ import FileUpload from '@/components/profile-builder/file-upload';
 import FileAssessment from '@/components/profile-builder/file-assessment';
 import ExtractionStep from '@/components/profile-builder/extraction-step';
 import TearSheet, { TearSheetHandle } from '@/components/profile-builder/tear-sheet';
+import InvestmentProposition from '@/components/profile-builder/investment-proposition';
 import SubmitStep from '@/components/profile-builder/submit-step';
 import Repository from '@/components/profile-builder/repository';
 import Changelog from '@/components/profile-builder/changelog';
 import { smartMergeFull } from '@/lib/profile-merge';
+import { uploadDocuments } from '@/lib/upload-documents';
 
 type View = 'new' | 'repository' | 'edit';
 
@@ -46,6 +48,7 @@ export default function ProfileBuilderPage() {
   const [profile, setProfile] = useState<InnovatorProfile>(emptyProfile());
   const [editId, setEditId] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [reviewView, setReviewView] = useState<'tear-sheet' | 'investment-proposition'>('tear-sheet');
 
   const handleReset = useCallback(() => {
     setView('new');
@@ -156,20 +159,34 @@ export default function ProfileBuilderPage() {
             {step === 2 && <FileAssessment files={uploadedFiles} onComplete={handleAssessmentComplete} onBack={() => setStep(1)} />}
             {step === 3 && <ExtractionStep files={assessedFiles} onComplete={handleExtractionComplete} onBack={() => setStep(2)} />}
             {step === 4 && (
-              <TearSheet
-                innovator={organisation}
-                innovation={profile}
-                onUpdateInnovator={setOrganisation}
-                onUpdateInnovation={setProfile}
-                onSubmit={() => setStep(5)}
-                onBack={() => setStep(3)}
-              />
+              <div>
+                <div className="mb-4 flex justify-end">
+                  <ViewToggle value={reviewView} onChange={setReviewView} />
+                </div>
+                {reviewView === 'tear-sheet' ? (
+                  <TearSheet
+                    innovator={organisation}
+                    innovation={profile}
+                    onUpdateInnovator={setOrganisation}
+                    onUpdateInnovation={setProfile}
+                    onSubmit={() => setStep(5)}
+                    onBack={() => setStep(3)}
+                  />
+                ) : (
+                  <InvestmentProposition
+                    innovator={organisation}
+                    innovation={profile}
+                    onUpdateInnovation={setProfile}
+                  />
+                )}
+              </div>
             )}
             {step === 5 && (
               <SubmitStep
                 organisation={organisation}
                 orgId={orgId}
                 profile={profile}
+                files={assessedFiles}
                 submitted={submitted}
                 onSubmit={(newOrgId) => { setOrgId(newOrgId); setSubmitted(true); }}
                 onBack={() => setStep(4)}
@@ -312,6 +329,23 @@ function OrgPicker({ onSelect }: { onSelect: (org: Organisation, id: string | nu
   );
 }
 
+/* ---------- View Toggle ---------- */
+function ViewToggle({ value, onChange }: { value: 'tear-sheet' | 'investment-proposition'; onChange: (v: 'tear-sheet' | 'investment-proposition') => void }) {
+  return (
+    <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
+      {(['tear-sheet', 'investment-proposition'] as const).map((v) => (
+        <button
+          key={v}
+          onClick={() => onChange(v)}
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${value === v ? 'bg-amber-500 text-amber-900' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          {v === 'tear-sheet' ? 'Profile' : 'Investment proposition'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* ---------- Edit Profile View ---------- */
 function EditProfileView({
   profile,
@@ -335,6 +369,8 @@ function EditProfileView({
   const [saved, setSaved] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  const [viewMode, setViewMode] = useState<'tear-sheet' | 'investment-proposition'>('tear-sheet');
+  const [mergeResult, setMergeResult] = useState<{ updatedFields: string[]; uploadedFiles: string[]; uploadErrors: string[] } | null>(null);
 
   const handleSave = async () => {
     setSaving(true);
@@ -389,7 +425,7 @@ function EditProfileView({
           assessed.push({ ...f, recommendation: 'extract', reason: '', decision: 'extract', textContent: text });
         }
       }
-      if (assessed.length === 0) { alert('No extractable files'); setExtracting(false); return; }
+      if (assessed.length === 0) { setMergeResult({ updatedFields: [], uploadedFiles: [], uploadErrors: ['No extractable files found'] }); setExtracting(false); return; }
 
       const payloads = assessed.map((f) => ({ name: f.name, type: f.type, base64: f.base64, textContent: f.textContent }));
       const res = await fetch('/api/profile-extract', {
@@ -416,14 +452,18 @@ function EditProfileView({
         organisation, profile, extOrg || emptyOrganisation(), normalizedProfile
       );
 
-      if (updatedFields.length > 0) {
-        alert(`Updated ${updatedFields.length} field(s): ${updatedFields.join(', ')}`);
-      } else {
-        alert('No new information found in the uploaded files.');
-      }
+      // Upload source files to Storage via server-side API route
+      const { docs: newDocs, errors: uploadErrors } = orgId
+        ? await uploadDocuments(assessed, orgId)
+        : { docs: [], errors: [] };
+      const profileWithDocs = {
+        ...mergedProfile,
+        documents: [...(profile.documents || []), ...newDocs],
+      };
 
       onUpdateOrg(mergedOrg);
-      onUpdate(mergedProfile);
+      onUpdate(profileWithDocs);
+      setMergeResult({ updatedFields, uploadedFiles: newDocs.map((d) => d.name), uploadErrors });
       setShowUpload(false);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Extraction failed');
@@ -453,7 +493,8 @@ function EditProfileView({
         <>
           <div className="mb-4 flex items-center justify-between">
             <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-700">← Repository</button>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <ViewToggle value={viewMode} onChange={setViewMode} />
               <Changelog profileId={profileId} />
               <button onClick={() => tearSheetRef.current?.exportPdf()} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
                 Export
@@ -466,16 +507,56 @@ function EditProfileView({
               </button>
             </div>
           </div>
-          <TearSheet
-            ref={tearSheetRef}
-            innovator={organisation}
-            innovation={profile}
-            onUpdateInnovator={onUpdateOrg}
-            onUpdateInnovation={onUpdate}
-            onSubmit={handleSave}
-            onBack={onBack}
-            hideToolbar
-          />
+          {mergeResult && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-xs font-semibold text-amber-800">Files processed</span>
+                <button onClick={() => setMergeResult(null)} className="text-xs text-amber-500 hover:text-amber-700">Dismiss</button>
+              </div>
+              {mergeResult.updatedFields.length > 0 ? (
+                <div className="mb-2">
+                  <p className="mb-1 text-xs text-amber-700">{mergeResult.updatedFields.length} field{mergeResult.updatedFields.length !== 1 ? 's' : ''} updated from uploaded files:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {mergeResult.updatedFields.map((f) => (
+                      <span key={f} className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] text-amber-800">{f.replace(/_/g, ' ')}</span>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-amber-700">No new information found in the uploaded files.</p>
+              )}
+              {mergeResult.uploadedFiles.length > 0 && (
+                <p className="text-xs text-emerald-700">{mergeResult.uploadedFiles.length} file{mergeResult.uploadedFiles.length !== 1 ? 's' : ''} saved to storage: {mergeResult.uploadedFiles.join(', ')}</p>
+              )}
+              {mergeResult.uploadErrors.length > 0 && (
+                <div className="mt-1">
+                  {mergeResult.uploadErrors.map((e, i) => (
+                    <p key={i} className="font-mono text-[10px] text-red-600">{e}</p>
+                  ))}
+                </div>
+              )}
+              <p className="mt-2 text-[10px] text-amber-500">Click <strong>Save changes</strong> to persist these updates.</p>
+            </div>
+          )}
+
+          {viewMode === 'tear-sheet' ? (
+            <TearSheet
+              ref={tearSheetRef}
+              innovator={organisation}
+              innovation={profile}
+              onUpdateInnovator={onUpdateOrg}
+              onUpdateInnovation={onUpdate}
+              onSubmit={handleSave}
+              onBack={onBack}
+              hideToolbar
+            />
+          ) : (
+            <InvestmentProposition
+              innovator={organisation}
+              innovation={profile}
+              onUpdateInnovation={onUpdate}
+            />
+          )}
         </>
       )}
     </div>

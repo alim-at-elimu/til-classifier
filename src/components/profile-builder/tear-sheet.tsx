@@ -394,7 +394,7 @@ ${maturityHtml}
             </div>
 
             {/* Two-column: left = gov + quote, right = evidence + economics */}
-            <div className="grid gap-6" style={{ gridTemplateColumns: '190px 1fr' }}>
+            <div className="grid gap-6" style={{ gridTemplateColumns: '280px 1fr' }}>
               <div className="space-y-4">
                 {/* Government relationships */}
                 <div>
@@ -406,7 +406,7 @@ ${maturityHtml}
                         <div key={i} className={`flex items-start gap-2 rounded p-1.5 ${isFocal ? 'bg-amber-50 ring-1 ring-amber-300' : 'bg-gray-50'}`}>
                           <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[g.status]}`} />
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-1.5">
                               <input value={g.country} onChange={(e) => updateGov(i, 'country', e.target.value)} placeholder="Country" className="w-20 shrink-0 bg-transparent text-xs font-medium text-gray-800 placeholder:text-gray-300 focus:outline-none" />
                               <select value={g.status} onChange={(e) => updateGov(i, 'status', e.target.value)} className="shrink-0 rounded bg-white px-1 py-0.5 text-[10px] text-gray-600 border border-gray-200">
                                 {GOV_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -414,7 +414,7 @@ ${maturityHtml}
                               <button onClick={() => updateGov(i, 'focal_point', !isFocal)} className={`shrink-0 rounded-full px-1.5 py-0.5 text-[8px] font-semibold ${isFocal ? 'bg-amber-500 text-white' : 'bg-gray-200 text-gray-500 hover:bg-amber-200'}`}>Focal</button>
                               <button onClick={() => removeGov(i)} className="shrink-0 text-xs text-gray-300 hover:text-red-400">✕</button>
                             </div>
-                            <input value={g.ministry} onChange={(e) => updateGov(i, 'ministry', e.target.value)} placeholder="Ministry name" className="mt-0.5 w-full bg-transparent text-[11px] text-gray-600 placeholder:text-gray-300 focus:outline-none" />
+                            <AutoTextarea value={g.ministry} onChange={(v) => updateGov(i, 'ministry', v)} placeholder="Ministry name" className="mt-0.5 text-[11px] text-gray-600 placeholder:text-gray-300" />
                           </div>
                         </div>
                       );
@@ -526,6 +526,33 @@ ${maturityHtml}
                 </div>
               </div>
             </div>
+
+            {/* Documents */}
+            {p.documents && p.documents.length > 0 && (
+              <div>
+                <Lbl text="Source documents" field="documents" fl={[]} w={[]} u={[]} />
+                <div className="flex flex-wrap gap-2">
+                  {p.documents.map((doc, i) => {
+                    const publicUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/innovation-documents/${doc.path}`;
+                    const icon = doc.type === 'pdf' ? '📄' : doc.type === 'xlsx' ? '📊' : '📎';
+                    const sizeMb = (doc.size / (1024 * 1024)).toFixed(1);
+                    return (
+                      <a
+                        key={i}
+                        href={publicUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 rounded border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"
+                      >
+                        <span>{icon}</span>
+                        <span className="max-w-[160px] truncate">{doc.name}</span>
+                        <span className="text-gray-400">{sizeMb} MB</span>
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Adoption pathway */}
             <div>
