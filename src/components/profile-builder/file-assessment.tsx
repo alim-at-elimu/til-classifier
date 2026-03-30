@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { UploadedFile, AssessedFile } from '@/lib/profile-types';
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
+const LARGE_FILE = 5 * 1024 * 1024; // 5 MB — default to "store only"
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -16,7 +17,6 @@ async function readFileAsBase64(file: File): Promise<string> {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      // Remove data URL prefix
       const base64 = result.split(',')[1] || result;
       resolve(base64);
     };
@@ -36,6 +36,14 @@ async function readXlsxAsText(file: File): Promise<string> {
   }
   return sheets.join('\n\n');
 }
+
+const TYPE_ICONS: Record<string, string> = { pdf: '📄', xlsx: '📊', unknown: '📎' };
+
+const DECISION_OPTIONS: { value: AssessedFile['decision']; label: string; subtitle: string; color: string; activeColor: string }[] = [
+  { value: 'extract', label: 'Extract', subtitle: 'Process with Claude AI', color: 'bg-gray-100 text-gray-500 hover:bg-gray-200', activeColor: 'bg-emerald-100 text-emerald-700' },
+  { value: 'store', label: 'Store only', subtitle: 'Save without extraction', color: 'bg-gray-100 text-gray-500 hover:bg-gray-200', activeColor: 'bg-blue-100 text-blue-700' },
+  { value: 'skip', label: 'Skip', subtitle: 'Do not upload', color: 'bg-gray-100 text-gray-500 hover:bg-gray-200', activeColor: 'bg-gray-200 text-gray-600' },
+];
 
 interface Props {
   files: UploadedFile[];
@@ -78,14 +86,19 @@ export default function FileAssessment({ files, onComplete, onBack }: Props) {
           continue;
         }
 
+        // Large files default to store-only
+        const isLarge = f.size > LARGE_FILE;
+
         try {
           if (f.type === 'pdf') {
             const base64 = await readFileAsBase64(f.file);
             results.push({
               ...f,
-              recommendation: 'extract',
-              reason: 'PDF document — will be sent to Claude for extraction',
-              decision: 'extract',
+              recommendation: isLarge ? 'store' : 'extract',
+              reason: isLarge
+                ? `Large PDF (${formatSize(f.size)}) — defaulting to store only`
+                : 'PDF document — ready for Claude extraction',
+              decision: isLarge ? 'store' : 'extract',
               base64,
             });
           } else if (f.type === 'xlsx') {
@@ -101,9 +114,11 @@ export default function FileAssessment({ files, onComplete, onBack }: Props) {
             } else {
               results.push({
                 ...f,
-                recommendation: 'extract',
-                reason: `Spreadsheet with ${textContent.length.toLocaleString()} characters of data`,
-                decision: 'extract',
+                recommendation: isLarge ? 'store' : 'extract',
+                reason: isLarge
+                  ? `Large spreadsheet (${formatSize(f.size)}) — defaulting to store only`
+                  : `Spreadsheet with ${textContent.length.toLocaleString()} characters of data`,
+                decision: isLarge ? 'store' : 'extract',
                 textContent,
               });
             }
@@ -130,17 +145,15 @@ export default function FileAssessment({ files, onComplete, onBack }: Props) {
     };
   }, [files]);
 
-  const toggleDecision = useCallback((id: string) => {
+  const setDecision = useCallback((id: string, decision: AssessedFile['decision']) => {
     setAssessed((prev) =>
-      prev.map((f) =>
-        f.id === id
-          ? { ...f, decision: f.decision === 'extract' ? 'skip' : 'extract' }
-          : f
-      )
+      prev.map((f) => (f.id === id ? { ...f, decision } : f))
     );
   }, []);
 
   const extractCount = assessed.filter((f) => f.decision === 'extract').length;
+  const storeCount = assessed.filter((f) => f.decision === 'store').length;
+  const skipCount = assessed.filter((f) => f.decision === 'skip').length;
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -148,7 +161,7 @@ export default function FileAssessment({ files, onComplete, onBack }: Props) {
         File assessment
       </h2>
       <p className="mb-6 text-sm text-gray-500">
-        Review which files should be sent for extraction. Toggle any decision.
+        Choose how each file should be handled: extract content with Claude AI, store without extraction, or skip.
       </p>
 
       {processing ? (
@@ -158,28 +171,38 @@ export default function FileAssessment({ files, onComplete, onBack }: Props) {
         </div>
       ) : (
         <>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {assessed.map((f) => (
               <div
                 key={f.id}
-                className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3"
+                className="rounded-lg border border-gray-200 bg-white px-4 py-3"
               >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-gray-800">
-                    {f.name}
-                  </p>
-                  <p className="text-xs text-gray-400">{f.reason}</p>
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-lg">{TYPE_ICONS[f.type]}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-gray-800">
+                      {f.name}
+                    </p>
+                    <p className="text-xs text-gray-400">{f.reason}</p>
+                  </div>
+                  <span className="shrink-0 rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                    {formatSize(f.size)}
+                  </span>
                 </div>
-                <button
-                  onClick={() => toggleDecision(f.id)}
-                  className={`ml-4 shrink-0 rounded-full px-3 py-1 text-xs font-medium transition ${
-                    f.decision === 'extract'
-                      ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                  }`}
-                >
-                  {f.decision === 'extract' ? 'Extract' : 'Skip'}
-                </button>
+                <div className="flex gap-1.5">
+                  {DECISION_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setDecision(f.id, opt.value)}
+                      className={`flex flex-col items-center rounded-md px-3 py-1.5 text-center transition ${
+                        f.decision === opt.value ? opt.activeColor : opt.color
+                      }`}
+                    >
+                      <span className="text-xs font-medium">{opt.label}</span>
+                      <span className="text-[9px] opacity-70">{opt.subtitle}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
@@ -193,15 +216,14 @@ export default function FileAssessment({ files, onComplete, onBack }: Props) {
             </button>
             <div className="flex items-center gap-4">
               <span className="text-xs text-gray-400">
-                {extractCount} file{extractCount !== 1 ? 's' : ''} will be
-                extracted
+                {extractCount} extract · {storeCount} store · {skipCount} skip
               </span>
               <button
                 onClick={() => onComplete(assessed)}
-                disabled={extractCount === 0}
+                disabled={extractCount === 0 && storeCount === 0}
                 className="rounded-lg bg-amber-500 px-6 py-2.5 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-40"
               >
-                Run extraction →
+                Continue →
               </button>
             </div>
           </div>

@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   try {
     const { url, key } = getSupabaseConfig();
     const res = await fetch(
-      `${url}/rest/v1/innovator_profiles?organisation_id=eq.${orgId}&select=id,theme,stage,status,created_at,confidence_flags,web_augmented_fields&order=created_at.desc`,
+      `${url}/rest/v1/innovations?innovator_id=eq.${orgId}&select=id,name,theme,stage,status,created_at,confidence_flags,web_augmented_fields&order=created_at.desc`,
       { headers: supabaseHeaders(key), cache: 'no-store' }
     );
     if (!res.ok) return NextResponse.json({ error: await res.text() }, { status: res.status });

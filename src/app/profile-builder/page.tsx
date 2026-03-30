@@ -1,27 +1,49 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   WorkflowStep,
   UploadedFile,
   AssessedFile,
-  InnovatorProfile,
-  Organisation,
-  emptyProfile,
-  emptyOrganisation,
+  Innovation,
+  Innovator,
+  emptyInnovation,
+  emptyInnovator,
 } from '@/lib/profile-types';
+
+// Legacy type aliases used within this file
+type InnovatorProfile = Innovation;
+type Organisation = Innovator;
+const emptyProfile = emptyInnovation;
+const emptyOrganisation = emptyInnovator;
 import FileUpload from '@/components/profile-builder/file-upload';
 import FileAssessment from '@/components/profile-builder/file-assessment';
 import ExtractionStep from '@/components/profile-builder/extraction-step';
-import TearSheet, { TearSheetHandle } from '@/components/profile-builder/tear-sheet';
+import TearSheet from '@/components/profile-builder/tear-sheet';
+import InvestmentProposition from '@/components/profile-builder/investment-proposition';
 import SubmitStep from '@/components/profile-builder/submit-step';
 import Repository from '@/components/profile-builder/repository';
 import Changelog from '@/components/profile-builder/changelog';
 import { smartMergeFull } from '@/lib/profile-merge';
+import { uploadDocuments } from '@/lib/upload-documents';
 
 type View = 'new' | 'repository' | 'edit';
 
-const STEP_LABELS: Record<WorkflowStep, string> = {
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+function withDocumentUrls(innovation: Innovation): Innovation {
+  if (!innovation.documents?.length) return innovation;
+  return {
+    ...innovation,
+    documents: innovation.documents.map((doc) => ({
+      ...doc,
+      path: doc.path.startsWith('http')
+        ? doc.path
+        : `${SUPABASE_URL}/storage/v1/object/public/innovation-documents/${doc.path}`,
+    })),
+  };
+}
+
+const STEP_LABELS: Record<number, string> = {
   0: 'Organisation',
   1: 'Upload',
   2: 'Assess',
@@ -32,7 +54,7 @@ const STEP_LABELS: Record<WorkflowStep, string> = {
 
 export default function ProfileBuilderPage() {
   const [view, setView] = useState<View>('new');
-  const [step, setStep] = useState<WorkflowStep>(0);
+  const [step, setStep] = useState<number>(0);
   const [organisation, setOrganisation] = useState<Organisation>(emptyOrganisation());
   const [orgId, setOrgId] = useState<string | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
@@ -40,6 +62,7 @@ export default function ProfileBuilderPage() {
   const [profile, setProfile] = useState<InnovatorProfile>(emptyProfile());
   const [editId, setEditId] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [reviewView, setReviewView] = useState<'tear-sheet' | 'investment-proposition'>('tear-sheet');
 
   const handleReset = useCallback(() => {
     setView('new');
@@ -66,17 +89,23 @@ export default function ProfileBuilderPage() {
 
   const handleAssessmentComplete = useCallback((files: AssessedFile[]) => {
     setAssessedFiles(files);
-    setStep(3);
+    const hasExtract = files.some((f) => f.decision === 'extract');
+    if (hasExtract) {
+      setStep(3);
+    } else {
+      // No files to extract — skip to review with empty profile
+      setStep(4);
+    }
   }, []);
 
-  const handleExtractionComplete = useCallback((extractedOrg: Organisation, extractedProfile: InnovatorProfile) => {
+  const handleExtractionComplete = useCallback((extractedOrg: Innovator, extractedInnovation: Innovation) => {
     // If org was pre-selected, merge org data; otherwise use extracted
     if (orgId) {
-      setOrganisation((prev) => ({ ...prev, ...Object.fromEntries(Object.entries(extractedOrg).filter(([, v]) => v !== null && !orgId)) }));
+      setOrganisation((prev) => ({ ...prev, ...Object.fromEntries(Object.entries(extractedOrg).filter(([, v]) => v !== null)) }));
     } else {
       setOrganisation(extractedOrg);
     }
-    setProfile(extractedProfile);
+    setProfile(extractedInnovation);
     setStep(4);
   }, [orgId]);
 
@@ -130,7 +159,7 @@ export default function ProfileBuilderPage() {
           <div className="border-b border-gray-200 bg-white">
             <div className="mx-auto max-w-7xl px-6 py-3">
               <div className="flex items-center gap-1">
-                {([0, 1, 2, 3, 4, 5] as WorkflowStep[]).map((s) => (
+                {([0, 1, 2, 3, 4, 5] as number[]).map((s) => (
                   <div key={s} className="flex items-center">
                     <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${s === step ? 'bg-amber-100 text-amber-800' : s < step ? 'bg-gray-100 text-gray-600' : 'text-gray-400'}`}>
                       <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${s === step ? 'bg-amber-500 text-white' : s < step ? 'bg-gray-400 text-white' : 'bg-gray-200 text-gray-400'}`}>
@@ -150,20 +179,33 @@ export default function ProfileBuilderPage() {
             {step === 2 && <FileAssessment files={uploadedFiles} onComplete={handleAssessmentComplete} onBack={() => setStep(1)} />}
             {step === 3 && <ExtractionStep files={assessedFiles} onComplete={handleExtractionComplete} onBack={() => setStep(2)} />}
             {step === 4 && (
-              <TearSheet
-                organisation={organisation}
-                profile={profile}
-                onUpdateOrg={setOrganisation}
-                onUpdate={setProfile}
-                onSubmit={() => setStep(5)}
-                onBack={() => setStep(3)}
-              />
+              <div>
+                <div className="mb-4 flex items-center justify-between">
+                  <button onClick={() => setStep(3)} className="text-sm text-gray-500 hover:text-gray-700">← Back</button>
+                  <div className="flex items-center gap-3">
+                    <ViewToggle value={reviewView} onChange={setReviewView} />
+                    <button onClick={() => setStep(5)} className="rounded-lg bg-amber-500 px-5 py-2 text-sm font-medium text-white hover:bg-amber-600">Submit →</button>
+                  </div>
+                </div>
+                {reviewView === 'tear-sheet' ? (
+                  <TearSheet
+                    innovator={organisation}
+                    innovation={withDocumentUrls(profile)}
+                  />
+                ) : (
+                  <InvestmentProposition
+                    innovator={organisation}
+                    innovation={profile}
+                  />
+                )}
+              </div>
             )}
             {step === 5 && (
               <SubmitStep
                 organisation={organisation}
                 orgId={orgId}
                 profile={profile}
+                files={assessedFiles}
                 submitted={submitted}
                 onSubmit={(newOrgId) => { setOrgId(newOrgId); setSubmitted(true); }}
                 onBack={() => setStep(4)}
@@ -306,6 +348,23 @@ function OrgPicker({ onSelect }: { onSelect: (org: Organisation, id: string | nu
   );
 }
 
+/* ---------- View Toggle ---------- */
+function ViewToggle({ value, onChange }: { value: 'tear-sheet' | 'investment-proposition'; onChange: (v: 'tear-sheet' | 'investment-proposition') => void }) {
+  return (
+    <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
+      {(['tear-sheet', 'investment-proposition'] as const).map((v) => (
+        <button
+          key={v}
+          onClick={() => onChange(v)}
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${value === v ? 'bg-amber-500 text-amber-900' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          {v === 'tear-sheet' ? 'Profile' : 'Investment proposition'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* ---------- Edit Profile View ---------- */
 function EditProfileView({
   profile,
@@ -316,19 +375,20 @@ function EditProfileView({
   onUpdateOrg,
   onBack,
 }: {
-  profile: InnovatorProfile;
-  organisation: Organisation;
+  profile: Innovation;
+  organisation: Innovator;
   profileId: string;
   orgId: string | null;
-  onUpdate: (p: InnovatorProfile) => void;
-  onUpdateOrg: (o: Organisation) => void;
+  onUpdate: (p: Innovation) => void;
+  onUpdateOrg: (o: Innovator) => void;
   onBack: () => void;
 }) {
-  const tearSheetRef = useRef<TearSheetHandle>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [showUpload, setShowUpload] = useState(false);
-  const [extracting, setExtracting] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState<'off' | 'select' | 'assess' | 'processing'>('off');
+  const [editUploadedFiles, setEditUploadedFiles] = useState<UploadedFile[]>([]);
+  const [viewMode, setViewMode] = useState<'tear-sheet' | 'investment-proposition'>('tear-sheet');
+  const [mergeResult, setMergeResult] = useState<{ updatedFields: string[]; uploadedFiles: string[]; uploadErrors: string[] } | null>(null);
 
   const handleSave = async () => {
     setSaving(true);
@@ -361,97 +421,96 @@ function EditProfileView({
     }
   };
 
-  const handleFileExtract = async (files: UploadedFile[]) => {
-    setExtracting(true);
+  const handleEditFilesSelected = (files: UploadedFile[]) => {
+    setEditUploadedFiles(files);
+    setUploadPhase('assess');
+  };
+
+  const handleEditAssessmentComplete = async (assessed: AssessedFile[]) => {
+    setUploadPhase('processing');
     try {
-      const assessed: AssessedFile[] = [];
-      for (const f of files) {
-        if (f.size > 10 * 1024 * 1024) continue;
-        if (f.type === 'pdf') {
-          const base64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve((reader.result as string).split(',')[1]);
-            reader.onerror = reject;
-            reader.readAsDataURL(f.file);
-          });
-          assessed.push({ ...f, recommendation: 'extract', reason: '', decision: 'extract', base64 });
-        } else if (f.type === 'xlsx') {
-          const XLSX = await import('xlsx');
-          const buffer = await f.file.arrayBuffer();
-          const workbook = XLSX.read(buffer, { type: 'array' });
-          const text = workbook.SheetNames.map((n) => XLSX.utils.sheet_to_csv(workbook.Sheets[n])).join('\n\n');
-          assessed.push({ ...f, recommendation: 'extract', reason: '', decision: 'extract', textContent: text });
-        }
+      const extractFiles = assessed.filter((f) => f.decision === 'extract');
+      let mergedOrg = organisation;
+      let mergedProfile = profile;
+      let updatedFields: string[] = [];
+
+      // Run Claude extraction only on files marked for extraction
+      if (extractFiles.length > 0) {
+        const payloads = extractFiles.map((f) => ({ name: f.name, type: f.type, base64: f.base64, textContent: f.textContent }));
+        const res = await fetch('/api/profile-extract', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ files: payloads }),
+        });
+        if (!res.ok) throw new Error('Extraction failed');
+        const { organisation: extOrg, profile: extProfile } = await res.json();
+
+        const normalizedProfile = {
+          ...emptyProfile(),
+          ...extProfile,
+          model_steps: extProfile.model_steps || [],
+          evidence_stats: extProfile.evidence_stats || [],
+          government_relationships: extProfile.government_relationships || [],
+          adoption_pathway_bullets: extProfile.adoption_pathway_bullets || [],
+          funding_covers: extProfile.funding_covers || [],
+          confidence_flags: extProfile.confidence_flags || [],
+          file_updated_fields: [],
+        };
+
+        const result = smartMergeFull(
+          organisation, profile, extOrg || emptyOrganisation(), normalizedProfile
+        );
+        mergedOrg = result.mergedOrg;
+        mergedProfile = result.mergedProfile;
+        updatedFields = result.updatedFields;
       }
-      if (assessed.length === 0) { alert('No extractable files'); setExtracting(false); return; }
 
-      const payloads = assessed.map((f) => ({ name: f.name, type: f.type, base64: f.base64, textContent: f.textContent }));
-      const res = await fetch('/api/profile-extract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files: payloads }),
-      });
-      if (!res.ok) throw new Error('Extraction failed');
-      const { organisation: extOrg, profile: extProfile } = await res.json();
-
-      const normalizedProfile = {
-        ...emptyProfile(),
-        ...extProfile,
-        model_steps: extProfile.model_steps || [],
-        evidence_stats: extProfile.evidence_stats || [],
-        government_relationships: extProfile.government_relationships || [],
-        quotes: extProfile.quotes || [],
-        confidence_flags: extProfile.confidence_flags || [],
-        file_updated_fields: [],
+      // Upload all non-skipped files (both extract and store) to Storage
+      const { docs: newDocs, errors: uploadErrors } = orgId
+        ? await uploadDocuments(assessed, orgId)
+        : { docs: [], errors: [] };
+      const profileWithDocs = {
+        ...mergedProfile,
+        documents: [...(profile.documents || []), ...newDocs],
       };
 
-      const { mergedOrg, mergedProfile, updatedFields } = smartMergeFull(
-        organisation, profile, extOrg || emptyOrganisation(), normalizedProfile
-      );
-
-      if (updatedFields.length > 0) {
-        alert(`Updated ${updatedFields.length} field(s): ${updatedFields.join(', ')}`);
-      } else {
-        alert('No new information found in the uploaded files.');
-      }
-
       onUpdateOrg(mergedOrg);
-      onUpdate(mergedProfile);
-      setShowUpload(false);
+      onUpdate(profileWithDocs);
+      setMergeResult({ updatedFields, uploadedFiles: newDocs.map((d) => d.name), uploadErrors });
+      setUploadPhase('off');
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Extraction failed');
-    } finally {
-      setExtracting(false);
+      setUploadPhase('off');
     }
   };
 
   return (
     <div>
-      {showUpload ? (
+      {uploadPhase !== 'off' ? (
         <div>
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Upload additional files</h2>
-            <button onClick={() => setShowUpload(false)} className="text-sm text-gray-500">Cancel</button>
+            <button onClick={() => setUploadPhase('off')} className="text-sm text-gray-500">Cancel</button>
           </div>
-          {extracting ? (
+          {uploadPhase === 'processing' ? (
             <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-6">
               <div className="h-5 w-5 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
-              <p className="text-sm text-gray-600">Extracting and merging…</p>
+              <p className="text-sm text-gray-600">Processing files…</p>
             </div>
+          ) : uploadPhase === 'assess' ? (
+            <FileAssessment files={editUploadedFiles} onComplete={handleEditAssessmentComplete} onBack={() => setUploadPhase('select')} />
           ) : (
-            <FileUpload onComplete={handleFileExtract} />
+            <FileUpload onComplete={handleEditFilesSelected} />
           )}
         </div>
       ) : (
         <>
           <div className="mb-4 flex items-center justify-between">
             <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-700">← Repository</button>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <ViewToggle value={viewMode} onChange={setViewMode} />
               <Changelog profileId={profileId} />
-              <button onClick={() => tearSheetRef.current?.exportPdf()} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-                Export
-              </button>
-              <button onClick={() => setShowUpload(true)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              <button onClick={() => setUploadPhase('select')} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
                 Upload new files
               </button>
               <button onClick={handleSave} disabled={saving} className="rounded-lg bg-amber-500 px-5 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50">
@@ -459,16 +518,54 @@ function EditProfileView({
               </button>
             </div>
           </div>
-          <TearSheet
-            ref={tearSheetRef}
-            organisation={organisation}
-            profile={profile}
-            onUpdateOrg={onUpdateOrg}
-            onUpdate={onUpdate}
-            onSubmit={handleSave}
-            onBack={onBack}
-            hideToolbar
-          />
+          {mergeResult && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-xs font-semibold text-amber-800">Files processed</span>
+                <button onClick={() => setMergeResult(null)} className="text-xs text-amber-500 hover:text-amber-700">Dismiss</button>
+              </div>
+              {mergeResult.updatedFields.length > 0 ? (
+                <div className="mb-2">
+                  <p className="mb-1 text-xs text-amber-700">{mergeResult.updatedFields.length} field{mergeResult.updatedFields.length !== 1 ? 's' : ''} updated from uploaded files:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {mergeResult.updatedFields.map((f) => (
+                      <span key={f} className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] text-amber-800">{f.replace(/_/g, ' ')}</span>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-amber-700">No new information found in the uploaded files.</p>
+              )}
+              {mergeResult.uploadedFiles.length > 0 && (
+                <p className="text-xs text-emerald-700">{mergeResult.uploadedFiles.length} file{mergeResult.uploadedFiles.length !== 1 ? 's' : ''} saved to storage: {mergeResult.uploadedFiles.join(', ')}</p>
+              )}
+              {mergeResult.uploadErrors.length > 0 && (
+                <div className="mt-1">
+                  {mergeResult.uploadErrors.map((e, i) => (
+                    <p key={i} className="font-mono text-[10px] text-red-600">{e}</p>
+                  ))}
+                </div>
+              )}
+              <p className="mt-2 text-[10px] text-amber-500">Click <strong>Save changes</strong> to persist these updates.</p>
+            </div>
+          )}
+
+          {viewMode === 'tear-sheet' ? (
+            <TearSheet
+              innovator={organisation}
+              innovation={withDocumentUrls(profile)}
+              onDeleteDocument={(fullPath) => {
+                const prefix = `${SUPABASE_URL}/storage/v1/object/public/innovation-documents/`;
+                const relativePath = fullPath.startsWith(prefix) ? fullPath.slice(prefix.length) : fullPath;
+                onUpdate({ ...profile, documents: profile.documents.filter(d => d.path !== relativePath) });
+              }}
+            />
+          ) : (
+            <InvestmentProposition
+              innovator={organisation}
+              innovation={profile}
+            />
+          )}
         </>
       )}
     </div>

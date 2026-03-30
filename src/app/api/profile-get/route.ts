@@ -10,9 +10,8 @@ export async function GET(req: NextRequest) {
   try {
     const { url, key } = getSupabaseConfig();
 
-    // Fetch profile
     const res = await fetch(
-      `${url}/rest/v1/innovator_profiles?id=eq.${id}&limit=1`,
+      `${url}/rest/v1/innovations?id=eq.${id}&limit=1`,
       { headers: supabaseHeaders(key), cache: 'no-store' }
     );
     if (!res.ok) return NextResponse.json({ error: await res.text() }, { status: res.status });
@@ -20,11 +19,10 @@ export async function GET(req: NextRequest) {
     if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const profile = rows[0];
 
-    // Fetch organisation
     let organisation = null;
-    if (profile.organisation_id) {
+    if (profile.innovator_id) {
       const orgRes = await fetch(
-        `${url}/rest/v1/organisations?id=eq.${profile.organisation_id}&limit=1`,
+        `${url}/rest/v1/innovators?id=eq.${profile.innovator_id}&limit=1`,
         { headers: supabaseHeaders(key), cache: 'no-store' }
       );
       if (orgRes.ok) {

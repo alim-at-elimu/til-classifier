@@ -1,19 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import { InnovatorProfile, Organisation } from '@/lib/profile-types';
+import { Innovation, Innovator, AssessedFile } from '@/lib/profile-types';
+import { uploadDocuments } from '@/lib/upload-documents';
 
 interface Props {
-  organisation: Organisation;
+  organisation: Innovator;
   orgId: string | null;
-  profile: InnovatorProfile;
+  profile: Innovation;
+  files: AssessedFile[];
   submitted: boolean;
   onSubmit: (orgId: string) => void;
   onBack: () => void;
   onReset: () => void;
 }
 
-export default function SubmitStep({ organisation, orgId, profile, submitted, onSubmit, onBack, onReset }: Props) {
+
+export default function SubmitStep({ organisation, orgId, profile, files, submitted, onSubmit, onBack, onReset }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [profileId, setProfileId] = useState('');
@@ -35,25 +38,34 @@ export default function SubmitStep({ organisation, orgId, profile, submitted, on
         resolvedOrgId = orgData.id;
       }
 
-      // Submit profile
+      // Upload source files to Storage via server-side API route
+      const { docs: documents } = await uploadDocuments(files, resolvedOrgId!);
+
+      // Submit profile (includes documents array)
       const res = await fetch('/api/profile-submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile, organisation_id: resolvedOrgId }),
+        body: JSON.stringify({
+          profile: { ...profile, documents },
+          organisation_id: resolvedOrgId,
+          organisation,
+        }),
       });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || 'Save failed');
       }
-      const { id } = await res.json();
+      const { id, innovator_id } = await res.json();
       setProfileId(id);
-      onSubmit(resolvedOrgId!);
+      onSubmit(innovator_id || resolvedOrgId!);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSaving(false);
     }
   }
+
+  const uploadableCount = files.filter((f) => f.decision !== 'skip').length;
 
   if (submitted) {
     return (
@@ -89,6 +101,10 @@ export default function SubmitStep({ organisation, orgId, profile, submitted, on
             <span>{organisation.country || '—'}</span>
           </div>
           <div className="flex justify-between">
+            <span className="text-gray-500">Innovation</span>
+            <span className="font-medium">{profile.name || '(unnamed)'}</span>
+          </div>
+          <div className="flex justify-between">
             <span className="text-gray-500">Stage</span>
             <span>{profile.stage || '—'}</span>
           </div>
@@ -100,14 +116,18 @@ export default function SubmitStep({ organisation, orgId, profile, submitted, on
             <span className="text-gray-500">Fields needing review</span>
             <span className="text-amber-600">{profile.confidence_flags.length}</span>
           </div>
+          <div className="flex justify-between">
+            <span className="text-gray-500">Source files to upload</span>
+            <span className="text-emerald-600">{uploadableCount}</span>
+          </div>
           {orgId ? (
             <div className="flex justify-between">
-              <span className="text-gray-500">Organisation</span>
+              <span className="text-gray-500">Innovator</span>
               <span className="text-xs text-emerald-600">Existing (will link)</span>
             </div>
           ) : (
             <div className="flex justify-between">
-              <span className="text-gray-500">Organisation</span>
+              <span className="text-gray-500">Innovator</span>
               <span className="text-xs text-amber-600">New (will be created)</span>
             </div>
           )}

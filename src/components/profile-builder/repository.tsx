@@ -1,7 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { InnovatorProfile, Organisation, emptyProfile, emptyOrganisation } from '@/lib/profile-types';
+import { Innovation, Innovator, emptyInnovation, emptyInnovator } from '@/lib/profile-types';
+
+// Legacy type aliases used in this component
+type InnovatorProfile = Innovation;
+type Organisation = Innovator;
+const emptyProfile = emptyInnovation;
+const emptyOrganisation = emptyInnovator;
 
 interface OrgSummary {
   id: string;
@@ -15,6 +21,7 @@ interface OrgSummary {
 
 interface InnovationSummary {
   id: string;
+  name: string | null;
   theme: string | null;
   stage: string | null;
   status: string;
@@ -89,15 +96,14 @@ export default function Repository({ onEdit, onNewInnovation }: Props) {
         model_steps: raw.model_steps || [],
         evidence_stats: raw.evidence_stats || [],
         government_relationships: raw.government_relationships || [],
-        quotes: raw.quotes || [],
+        adoption_pathway_bullets: raw.adoption_pathway_bullets || [],
+        funding_covers: raw.funding_covers || [],
         confidence_flags: raw.confidence_flags || [],
         web_augmented_fields: raw.web_augmented_fields || [],
-        ask_funders: raw.ask_funders || '',
-        ask_governments: raw.ask_governments || '',
         file_updated_fields: [],
       };
       const org: Organisation = rawOrg
-        ? { id: rawOrg.id, name: rawOrg.name, country: rawOrg.country, founded_year: rawOrg.founded_year, team_size: rawOrg.team_size, african_led: rawOrg.african_led }
+        ? { ...emptyOrganisation(), id: rawOrg.id, name: rawOrg.name, country: rawOrg.country, founded_year: rawOrg.founded_year, team_size: rawOrg.team_size, african_led: rawOrg.african_led, org_type: rawOrg.org_type, track_record_description: rawOrg.track_record_description }
         : emptyOrganisation();
       onEdit(profile, org, id);
     } catch (err) {
@@ -108,12 +114,15 @@ export default function Repository({ onEdit, onNewInnovation }: Props) {
   const handleNewInnovation = () => {
     if (!selectedOrg) return;
     const org: Organisation = {
+      ...emptyOrganisation(),
       id: selectedOrg.id,
       name: selectedOrg.name,
       country: selectedOrg.country,
       team_size: selectedOrg.team_size,
       african_led: selectedOrg.african_led,
       founded_year: null,
+      org_type: null,
+      track_record_description: null,
     };
     onNewInnovation(org);
   };
@@ -162,6 +171,7 @@ export default function Repository({ onEdit, onNewInnovation }: Props) {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-gray-100 bg-gray-50">
                 <tr>
+                  <th className="px-4 py-2.5 text-xs font-medium text-gray-500">Name</th>
                   <th className="px-4 py-2.5 text-xs font-medium text-gray-500">Theme</th>
                   <th className="px-4 py-2.5 text-xs font-medium text-gray-500">Stage</th>
                   <th className="px-4 py-2.5 text-xs font-medium text-gray-500">Flags</th>
@@ -172,7 +182,8 @@ export default function Repository({ onEdit, onNewInnovation }: Props) {
               <tbody>
                 {innovations.map((inn) => (
                   <tr key={inn.id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{inn.theme || '(no theme)'}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900 break-words">{inn.name || '(untitled)'}</td>
+                    <td className="px-4 py-3 text-gray-600 text-xs">{inn.theme || '—'}</td>
                     <td className="px-4 py-3">
                       {inn.stage && <StageBadge stage={inn.stage} />}
                     </td>
