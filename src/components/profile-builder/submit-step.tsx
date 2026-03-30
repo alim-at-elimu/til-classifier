@@ -65,7 +65,7 @@ export default function SubmitStep({ organisation, orgId, profile, files, submit
     }
   }
 
-  const uploadableCount = files.filter((f) => f.decision === 'extract').length;
+  const uploadableCount = files.filter((f) => f.decision !== 'skip').length;
 
   if (submitted) {
     return (

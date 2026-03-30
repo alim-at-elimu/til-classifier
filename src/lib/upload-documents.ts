@@ -9,7 +9,7 @@ export async function uploadDocuments(files: AssessedFile[], orgId: string): Pro
   const docs: DocumentRecord[] = [];
   const errors: string[] = [];
   for (const f of files) {
-    if (f.decision !== 'extract') continue;
+    if (f.decision === 'skip') continue;
     try {
       const form = new FormData();
       form.append('file', f.file);

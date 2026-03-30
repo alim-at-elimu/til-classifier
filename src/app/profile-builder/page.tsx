@@ -75,7 +75,13 @@ export default function ProfileBuilderPage() {
 
   const handleAssessmentComplete = useCallback((files: AssessedFile[]) => {
     setAssessedFiles(files);
-    setStep(3);
+    const hasExtract = files.some((f) => f.decision === 'extract');
+    if (hasExtract) {
+      setStep(3);
+    } else {
+      // No files to extract — skip to review with empty profile
+      setStep(4);
+    }
   }, []);
 
   const handleExtractionComplete = useCallback((extractedOrg: Innovator, extractedInnovation: Innovation) => {
@@ -367,8 +373,8 @@ function EditProfileView({
   const tearSheetRef = useRef<TearSheetHandle>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [showUpload, setShowUpload] = useState(false);
-  const [extracting, setExtracting] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState<'off' | 'select' | 'assess' | 'processing'>('off');
+  const [editUploadedFiles, setEditUploadedFiles] = useState<UploadedFile[]>([]);
   const [viewMode, setViewMode] = useState<'tear-sheet' | 'investment-proposition'>('tear-sheet');
   const [mergeResult, setMergeResult] = useState<{ updatedFields: string[]; uploadedFiles: string[]; uploadErrors: string[] } | null>(null);
 
@@ -403,56 +409,51 @@ function EditProfileView({
     }
   };
 
-  const handleFileExtract = async (files: UploadedFile[]) => {
-    setExtracting(true);
+  const handleEditFilesSelected = (files: UploadedFile[]) => {
+    setEditUploadedFiles(files);
+    setUploadPhase('assess');
+  };
+
+  const handleEditAssessmentComplete = async (assessed: AssessedFile[]) => {
+    setUploadPhase('processing');
     try {
-      const assessed: AssessedFile[] = [];
-      for (const f of files) {
-        if (f.size > 10 * 1024 * 1024) continue;
-        if (f.type === 'pdf') {
-          const base64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve((reader.result as string).split(',')[1]);
-            reader.onerror = reject;
-            reader.readAsDataURL(f.file);
-          });
-          assessed.push({ ...f, recommendation: 'extract', reason: '', decision: 'extract', base64 });
-        } else if (f.type === 'xlsx') {
-          const XLSX = await import('xlsx');
-          const buffer = await f.file.arrayBuffer();
-          const workbook = XLSX.read(buffer, { type: 'array' });
-          const text = workbook.SheetNames.map((n) => XLSX.utils.sheet_to_csv(workbook.Sheets[n])).join('\n\n');
-          assessed.push({ ...f, recommendation: 'extract', reason: '', decision: 'extract', textContent: text });
-        }
+      const extractFiles = assessed.filter((f) => f.decision === 'extract');
+      let mergedOrg = organisation;
+      let mergedProfile = profile;
+      let updatedFields: string[] = [];
+
+      // Run Claude extraction only on files marked for extraction
+      if (extractFiles.length > 0) {
+        const payloads = extractFiles.map((f) => ({ name: f.name, type: f.type, base64: f.base64, textContent: f.textContent }));
+        const res = await fetch('/api/profile-extract', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ files: payloads }),
+        });
+        if (!res.ok) throw new Error('Extraction failed');
+        const { organisation: extOrg, profile: extProfile } = await res.json();
+
+        const normalizedProfile = {
+          ...emptyProfile(),
+          ...extProfile,
+          model_steps: extProfile.model_steps || [],
+          evidence_stats: extProfile.evidence_stats || [],
+          government_relationships: extProfile.government_relationships || [],
+          adoption_pathway_bullets: extProfile.adoption_pathway_bullets || [],
+          funding_covers: extProfile.funding_covers || [],
+          confidence_flags: extProfile.confidence_flags || [],
+          file_updated_fields: [],
+        };
+
+        const result = smartMergeFull(
+          organisation, profile, extOrg || emptyOrganisation(), normalizedProfile
+        );
+        mergedOrg = result.mergedOrg;
+        mergedProfile = result.mergedProfile;
+        updatedFields = result.updatedFields;
       }
-      if (assessed.length === 0) { setMergeResult({ updatedFields: [], uploadedFiles: [], uploadErrors: ['No extractable files found'] }); setExtracting(false); return; }
 
-      const payloads = assessed.map((f) => ({ name: f.name, type: f.type, base64: f.base64, textContent: f.textContent }));
-      const res = await fetch('/api/profile-extract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files: payloads }),
-      });
-      if (!res.ok) throw new Error('Extraction failed');
-      const { organisation: extOrg, profile: extProfile } = await res.json();
-
-      const normalizedProfile = {
-        ...emptyProfile(),
-        ...extProfile,
-        model_steps: extProfile.model_steps || [],
-        evidence_stats: extProfile.evidence_stats || [],
-        government_relationships: extProfile.government_relationships || [],
-        adoption_pathway_bullets: extProfile.adoption_pathway_bullets || [],
-        funding_covers: extProfile.funding_covers || [],
-        confidence_flags: extProfile.confidence_flags || [],
-        file_updated_fields: [],
-      };
-
-      const { mergedOrg, mergedProfile, updatedFields } = smartMergeFull(
-        organisation, profile, extOrg || emptyOrganisation(), normalizedProfile
-      );
-
-      // Upload source files to Storage via server-side API route
+      // Upload all non-skipped files (both extract and store) to Storage
       const { docs: newDocs, errors: uploadErrors } = orgId
         ? await uploadDocuments(assessed, orgId)
         : { docs: [], errors: [] };
@@ -464,29 +465,30 @@ function EditProfileView({
       onUpdateOrg(mergedOrg);
       onUpdate(profileWithDocs);
       setMergeResult({ updatedFields, uploadedFiles: newDocs.map((d) => d.name), uploadErrors });
-      setShowUpload(false);
+      setUploadPhase('off');
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Extraction failed');
-    } finally {
-      setExtracting(false);
+      setUploadPhase('off');
     }
   };
 
   return (
     <div>
-      {showUpload ? (
+      {uploadPhase !== 'off' ? (
         <div>
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Upload additional files</h2>
-            <button onClick={() => setShowUpload(false)} className="text-sm text-gray-500">Cancel</button>
+            <button onClick={() => setUploadPhase('off')} className="text-sm text-gray-500">Cancel</button>
           </div>
-          {extracting ? (
+          {uploadPhase === 'processing' ? (
             <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-6">
               <div className="h-5 w-5 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
-              <p className="text-sm text-gray-600">Extracting and merging…</p>
+              <p className="text-sm text-gray-600">Processing files…</p>
             </div>
+          ) : uploadPhase === 'assess' ? (
+            <FileAssessment files={editUploadedFiles} onComplete={handleEditAssessmentComplete} onBack={() => setUploadPhase('select')} />
           ) : (
-            <FileUpload onComplete={handleFileExtract} />
+            <FileUpload onComplete={handleEditFilesSelected} />
           )}
         </div>
       ) : (
@@ -499,7 +501,7 @@ function EditProfileView({
               <button onClick={() => tearSheetRef.current?.exportPdf()} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
                 Export
               </button>
-              <button onClick={() => setShowUpload(true)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              <button onClick={() => setUploadPhase('select')} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
                 Upload new files
               </button>
               <button onClick={handleSave} disabled={saving} className="rounded-lg bg-amber-500 px-5 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50">

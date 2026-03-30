@@ -21,6 +21,7 @@ interface OrgSummary {
 
 interface InnovationSummary {
   id: string;
+  name: string | null;
   theme: string | null;
   stage: string | null;
   status: string;
@@ -170,6 +171,7 @@ export default function Repository({ onEdit, onNewInnovation }: Props) {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-gray-100 bg-gray-50">
                 <tr>
+                  <th className="px-4 py-2.5 text-xs font-medium text-gray-500">Name</th>
                   <th className="px-4 py-2.5 text-xs font-medium text-gray-500">Theme</th>
                   <th className="px-4 py-2.5 text-xs font-medium text-gray-500">Stage</th>
                   <th className="px-4 py-2.5 text-xs font-medium text-gray-500">Flags</th>
@@ -180,7 +182,8 @@ export default function Repository({ onEdit, onNewInnovation }: Props) {
               <tbody>
                 {innovations.map((inn) => (
                   <tr key={inn.id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{inn.theme || '(no theme)'}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900 break-words">{inn.name || '(untitled)'}</td>
+                    <td className="px-4 py-3 text-gray-600 text-xs">{inn.theme || '—'}</td>
                     <td className="px-4 py-3">
                       {inn.stage && <StageBadge stage={inn.stage} />}
                     </td>

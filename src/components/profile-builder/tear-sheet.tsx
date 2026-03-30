@@ -190,6 +190,8 @@ ${(p.problem_statement || p.opportunity_statement) ? `
 <div class="section-title">How It Works</div>
 ${stepsHtml}
 
+${p.adoption_pathway_bullets.length > 0 ? `<div class="section-title">Adoption Pathway</div><ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.55;color:#374151">${p.adoption_pathway_bullets.map((b: string) => `<li>${b}</li>`).join('')}</ul>` : ''}
+
 ${p.pilot_scope ? `<div class="section-title">Pilot Scope</div><p style="font-size:13px;line-height:1.55">${p.pilot_scope}</p>` : ''}
 
 <hr class="divider">
@@ -226,6 +228,8 @@ ${maturityHtml}
     <div><label>For governments</label><p>${p.ask_for_governments || ''}</p></div>
   </div>
 </div>
+
+${p.documents && p.documents.length > 0 ? `<div class="section-title">Source Documents</div><div style="font-size:12px">${p.documents.map((d: { name: string; size: number; uploaded_at?: string }) => { const sizeMb = (d.size / (1024 * 1024)).toFixed(1); const date = d.uploaded_at ? new Date(d.uploaded_at).toLocaleDateString() : ''; return `<div style="padding:4px 0;border-bottom:1px solid #f3f4f6;color:#374151">${d.name} <span style="color:#9ca3af">${sizeMb} MB${date ? ` · ${date}` : ''}</span></div>`; }).join('')}</div>` : ''}
 
 </body></html>`;
 
@@ -325,27 +329,29 @@ ${maturityHtml}
 
         {/* INNOVATION CARD */}
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-gray-100 bg-amber-50 px-6 py-3">
-            <div className="flex items-center gap-3">
-              <span className="text-[9px] font-semibold uppercase tracking-wider text-amber-600">Innovation</span>
-              <input value={p.name || ''} onChange={(e) => set('name', e.target.value || null)} placeholder="Innovation name" className="rounded border border-gray-200 bg-white px-2 py-1 text-sm font-medium text-gray-800 placeholder:text-gray-300 focus:outline-none" style={{ width: 200 }} />
-              <select value={p.theme || ''} onChange={(e) => set('theme', (e.target.value as Theme) || null)} className="rounded bg-white px-2 py-1 text-xs text-gray-700 border border-gray-200">
-                <option value="">Select theme</option>
-                {THEMES.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              {org.african_led && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">African-led</span>}
-              <div className="relative inline-flex">
-                <span className="pointer-events-none rounded-full bg-teal-100 px-3 py-1 text-xs font-medium text-teal-800">
-                  {p.stage || 'Stage'}
-                </span>
-                <select value={p.stage || ''} onChange={(e) => set('stage', e.target.value || null)} className="absolute inset-0 w-full cursor-pointer opacity-0">
-                  <option value="">Stage</option>
-                  {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+          <div className="border-b border-gray-100 bg-amber-50 px-6 py-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-[9px] font-semibold uppercase tracking-wider text-amber-600">Innovation</span>
+                <select value={p.theme || ''} onChange={(e) => set('theme', (e.target.value as Theme) || null)} className="rounded bg-white px-2 py-1 text-xs text-gray-700 border border-gray-200">
+                  <option value="">Select theme</option>
+                  {THEMES.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
+              <div className="flex items-center gap-2">
+                {org.african_led && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">African-led</span>}
+                <div className="relative inline-flex">
+                  <span className="pointer-events-none rounded-full bg-teal-100 px-3 py-1 text-xs font-medium text-teal-800">
+                    {p.stage || 'Stage'}
+                  </span>
+                  <select value={p.stage || ''} onChange={(e) => set('stage', e.target.value || null)} className="absolute inset-0 w-full cursor-pointer opacity-0">
+                    <option value="">Stage</option>
+                    {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
             </div>
+            <input value={p.name || ''} onChange={(e) => set('name', e.target.value || null)} placeholder="Innovation name" className="w-full rounded border border-gray-200 bg-white px-2 py-1.5 text-sm font-semibold text-gray-900 placeholder:text-gray-300 focus:border-amber-400 focus:outline-none" />
           </div>
 
           <div className="px-6 py-4 space-y-5">
@@ -383,6 +389,23 @@ ${maturityHtml}
                 ))}
                 {p.model_steps.length < 4 && (
                   <button onClick={addModelStep} className="flex items-center justify-center rounded border border-dashed border-gray-300 py-6 text-[10px] text-gray-400 hover:border-amber-300 hover:text-amber-600">+ Step</button>
+                )}
+              </div>
+            </div>
+
+            {/* Adoption pathway */}
+            <div>
+              <Lbl text="Adoption pathway" field="adoption_pathway_bullets" fl={fl} w={w} u={u} />
+              <div className="space-y-1">
+                {p.adoption_pathway_bullets.map((bullet, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                    <AutoTextarea value={bullet} onChange={(v) => { const b = [...p.adoption_pathway_bullets]; b[i] = v; set('adoption_pathway_bullets', b); }} placeholder="Bullet point" className="text-sm text-gray-700" />
+                    <button onClick={() => { set('adoption_pathway_bullets', p.adoption_pathway_bullets.filter((_, idx) => idx !== i)); }} className="shrink-0 text-xs text-gray-300 hover:text-red-400">✕</button>
+                  </div>
+                ))}
+                {p.adoption_pathway_bullets.length < 5 && (
+                  <button onClick={() => set('adoption_pathway_bullets', [...p.adoption_pathway_bullets, ''])} className="text-[10px] text-amber-600 hover:text-amber-700">+ Add bullet</button>
                 )}
               </div>
             </div>
@@ -527,49 +550,36 @@ ${maturityHtml}
               </div>
             </div>
 
-            {/* Documents */}
+            {/* Source documents */}
             {p.documents && p.documents.length > 0 && (
               <div>
                 <Lbl text="Source documents" field="documents" fl={[]} w={[]} u={[]} />
-                <div className="flex flex-wrap gap-2">
+                <div className="space-y-1.5">
                   {p.documents.map((doc, i) => {
                     const publicUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/innovation-documents/${doc.path}`;
                     const icon = doc.type === 'pdf' ? '📄' : doc.type === 'xlsx' ? '📊' : '📎';
                     const sizeMb = (doc.size / (1024 * 1024)).toFixed(1);
+                    const uploadDate = doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString() : '';
                     return (
-                      <a
-                        key={i}
-                        href={publicUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 rounded border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"
-                      >
-                        <span>{icon}</span>
-                        <span className="max-w-[160px] truncate">{doc.name}</span>
-                        <span className="text-gray-400">{sizeMb} MB</span>
-                      </a>
+                      <div key={i} className="flex items-center gap-3 rounded border border-gray-200 bg-gray-50 px-3 py-2">
+                        <a
+                          href={publicUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex min-w-0 flex-1 items-center gap-2 text-xs text-gray-700 hover:text-amber-800"
+                        >
+                          <span className="shrink-0">{icon}</span>
+                          <span className="min-w-0 truncate font-medium">{doc.name}</span>
+                        </a>
+                        <span className="shrink-0 text-[10px] text-gray-400">{sizeMb} MB</span>
+                        {uploadDate && <span className="shrink-0 text-[10px] text-gray-400">{uploadDate}</span>}
+                        <button onClick={() => set('documents', p.documents.filter((_: unknown, idx: number) => idx !== i))} className="shrink-0 text-xs text-gray-300 hover:text-red-400">✕</button>
+                      </div>
                     );
                   })}
                 </div>
               </div>
             )}
-
-            {/* Adoption pathway */}
-            <div>
-              <Lbl text="Adoption pathway" field="adoption_pathway_bullets" fl={fl} w={w} u={u} />
-              <div className="space-y-1">
-                {p.adoption_pathway_bullets.map((bullet, i) => (
-                  <div key={i} className="flex items-start gap-2">
-                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
-                    <AutoTextarea value={bullet} onChange={(v) => { const b = [...p.adoption_pathway_bullets]; b[i] = v; set('adoption_pathway_bullets', b); }} placeholder="Bullet point" className="text-sm text-gray-700" />
-                    <button onClick={() => { set('adoption_pathway_bullets', p.adoption_pathway_bullets.filter((_, idx) => idx !== i)); }} className="shrink-0 text-xs text-gray-300 hover:text-red-400">✕</button>
-                  </div>
-                ))}
-                {p.adoption_pathway_bullets.length < 5 && (
-                  <button onClick={() => set('adoption_pathway_bullets', [...p.adoption_pathway_bullets, ''])} className="text-[10px] text-amber-600 hover:text-amber-700">+ Add bullet</button>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       </div>

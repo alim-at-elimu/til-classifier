@@ -22,7 +22,7 @@ export default function ExtractionStep({ files, onComplete, onBack }: Props) {
     let cancelled = false;
     async function run() {
       const extractable = files.filter((f) => f.decision === 'extract');
-      if (extractable.length === 0) { setPhase('error'); setError('No files selected.'); return; }
+      if (extractable.length === 0) { setPhase('error'); setError('No files selected for extraction. Go back and mark at least one file as "Extract".'); return; }
 
       const filePayloads = extractable.map((f) => ({
         name: f.name, type: f.type, base64: f.base64, textContent: f.textContent,

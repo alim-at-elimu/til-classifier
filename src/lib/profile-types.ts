@@ -94,9 +94,9 @@ export interface UploadedFile {
 }
 
 export interface AssessedFile extends UploadedFile {
-  recommendation: 'extract' | 'skip';
+  recommendation: 'extract' | 'store' | 'skip';
   reason: string;
-  decision: 'extract' | 'skip';
+  decision: 'extract' | 'store' | 'skip';
   textContent?: string;
   base64?: string;
 }
