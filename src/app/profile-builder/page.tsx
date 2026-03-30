@@ -20,7 +20,7 @@ import FileUpload from '@/components/profile-builder/file-upload';
 import FileAssessment from '@/components/profile-builder/file-assessment';
 import ExtractionStep from '@/components/profile-builder/extraction-step';
 import TearSheet, { TearSheetHandle } from '@/components/profile-builder/tear-sheet';
-import InvestmentProposition from '@/components/profile-builder/investment-proposition';
+import InvestmentProposition, { InvestmentPropositionHandle } from '@/components/profile-builder/investment-proposition';
 import SubmitStep from '@/components/profile-builder/submit-step';
 import Repository from '@/components/profile-builder/repository';
 import Changelog from '@/components/profile-builder/changelog';
@@ -371,6 +371,7 @@ function EditProfileView({
   onBack: () => void;
 }) {
   const tearSheetRef = useRef<TearSheetHandle>(null);
+  const ipRef = useRef<InvestmentPropositionHandle>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [uploadPhase, setUploadPhase] = useState<'off' | 'select' | 'assess' | 'processing'>('off');
@@ -498,7 +499,7 @@ function EditProfileView({
             <div className="flex items-center gap-2">
               <ViewToggle value={viewMode} onChange={setViewMode} />
               <Changelog profileId={profileId} />
-              <button onClick={() => tearSheetRef.current?.exportPdf()} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              <button onClick={() => viewMode === 'investment-proposition' ? ipRef.current?.exportPdf() : tearSheetRef.current?.exportPdf()} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
                 Export
               </button>
               <button onClick={() => setUploadPhase('select')} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
@@ -554,6 +555,7 @@ function EditProfileView({
             />
           ) : (
             <InvestmentProposition
+              ref={ipRef}
               innovator={organisation}
               innovation={profile}
               onUpdateInnovation={onUpdate}
