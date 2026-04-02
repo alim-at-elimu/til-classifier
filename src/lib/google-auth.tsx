@@ -20,15 +20,7 @@ export function useGoogleAuth() {
 export function GoogleAuthWrapper({ children }: { children: ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
 
-  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-
-  if (!clientId) {
-    return (
-      <GoogleAuthContext.Provider value={{ accessToken, setAccessToken }}>
-        {children}
-      </GoogleAuthContext.Provider>
-    );
-  }
+  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || 'unconfigured';
 
   return (
     <GoogleOAuthProvider clientId={clientId}>
