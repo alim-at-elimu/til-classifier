@@ -23,11 +23,12 @@ import TearSheet, { TearSheetHandle } from '@/components/profile-builder/tear-sh
 import InvestmentProposition, { InvestmentPropositionHandle } from '@/components/profile-builder/investment-proposition';
 import SubmitStep from '@/components/profile-builder/submit-step';
 import Repository from '@/components/profile-builder/repository';
+import BatchExport from '@/components/profile-builder/batch-export';
 import Changelog from '@/components/profile-builder/changelog';
 import { smartMergeFull } from '@/lib/profile-merge';
 import { uploadDocuments } from '@/lib/upload-documents';
 
-type View = 'new' | 'repository' | 'edit';
+type View = 'new' | 'repository' | 'edit' | 'batch-export';
 
 const STEP_LABELS: Record<number, string> = {
   0: 'Organisation',
@@ -134,6 +135,12 @@ export default function ProfileBuilderPage() {
               >
                 Repository
               </button>
+              <button
+                onClick={() => setView('batch-export')}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${view === 'batch-export' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Batch Export
+              </button>
             </div>
           </div>
         </div>
@@ -206,6 +213,12 @@ export default function ProfileBuilderPage() {
       {view === 'repository' && (
         <main className="mx-auto max-w-7xl px-6 py-6">
           <Repository onEdit={handleEditProfile} onNewInnovation={handleNewInnovation} />
+        </main>
+      )}
+
+      {view === 'batch-export' && (
+        <main>
+          <BatchExport />
         </main>
       )}
 
