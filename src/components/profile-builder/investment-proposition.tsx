@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
+import { useCallback, useImperativeHandle, forwardRef } from 'react';
 import { Innovation, Innovator } from '@/lib/profile-types';
 
 export interface InvestmentPropositionHandle {
@@ -18,14 +18,6 @@ interface Props {
   innovator: Innovator;
   innovation: Innovation;
   onUpdateInnovation: (i: Innovation) => void;
-}
-
-// ── AutoTextarea ──────────────────────────────────────────────────────────
-
-function AutoTextarea({ value, onChange, placeholder, className }: { value: string; onChange: (v: string) => void; placeholder?: string; className?: string }) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { const el = ref.current; if (!el) return; el.style.height = '0'; el.style.height = el.scrollHeight + 'px'; }, [value]);
-  return <textarea ref={ref} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={1} className={`w-full resize-none overflow-hidden bg-transparent placeholder:text-stone-300 focus:outline-none ${className || ''}`} />;
 }
 
 // ── NeedsInputBadge ───────────────────────────────────────────────────────
@@ -64,19 +56,6 @@ function WebAugmentedBadge() {
   );
 }
 
-// ── FieldWrapper ──────────────────────────────────────────────────────────
-
-function FieldWrapper({ fieldName, confidenceFlags, webAugmentedFields, children }: { fieldName: string; confidenceFlags: string[]; webAugmentedFields: string[]; children: React.ReactNode }) {
-  const isFlagged = confidenceFlags.includes(fieldName);
-  const isWebSourced = webAugmentedFields.includes(fieldName);
-  return (
-    <div className={`relative ${isFlagged ? 'pl-4' : ''}`} style={isFlagged ? { borderLeft: `3px solid ${AMBER}` } : undefined}>
-      {children}
-      {isWebSourced && <div className="mt-1"><WebAugmentedBadge /></div>}
-    </div>
-  );
-}
-
 // ── SubLabel ──────────────────────────────────────────────────────────────
 
 function SubLabel({ children }: { children: React.ReactNode }) {
@@ -85,23 +64,30 @@ function SubLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+// ── EmptyField ────────────────────────────────────────────────────────────
+
+function EmptyField({ hint }: { hint?: string }) {
+  return (
+    <div className="relative border-2 border-dashed border-stone-300 rounded-lg p-5 bg-stone-50/50">
+      <div className="absolute -top-2.5 left-3"><NeedsInputBadge /></div>
+      <p className="text-stone-400 italic text-sm mt-2">{hint ?? 'Human input required'}</p>
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────
 
 const InvestmentProposition = forwardRef<InvestmentPropositionHandle, Props>(function InvestmentProposition(
-  { innovator, innovation, onUpdateInnovation },
+  { innovator, innovation },
   ref
 ) {
   const p = innovation;
   const org = innovator;
   const fl = p.confidence_flags;
 
-  const set = useCallback((field: string, value: unknown) => {
-    onUpdateInnovation({ ...p, [field]: value });
-  }, [p, onUpdateInnovation]);
-
   const isHumanEmpty = (field: string, val: unknown) => fl.includes(field) && (val === null || val === undefined || val === '');
 
-  // Total funding computation (existing parseInt logic + v0 Intl formatting)
+  // Total funding computation
   const raw = p.funding_ask_base || '';
   const num = parseInt(raw.replace(/[^0-9]/g, ''), 10);
   const formattedTotal = !isNaN(num)
@@ -229,51 +215,41 @@ const InvestmentProposition = forwardRef<InvestmentPropositionHandle, Props>(fun
           {/* Investment thesis */}
           <div className="mb-8">
             {isHumanEmpty('investment_thesis', p.investment_thesis) ? (
-              <div className="relative border-2 border-dashed border-stone-300 rounded-lg p-5 bg-stone-50/50">
-                <div className="absolute -top-2.5 left-3"><NeedsInputBadge /></div>
-                <p className="text-stone-400 italic text-sm mt-2">
-                  Why is this innovator worth investing in? What makes the timing right?
-                </p>
-              </div>
+              <EmptyField hint="Why is this innovator worth investing in? What makes the timing right?" />
             ) : (
               <div className="rounded-lg px-5 py-4" style={{ backgroundColor: 'rgba(239, 159, 39, 0.08)', borderLeft: `4px solid ${AMBER}` }}>
-                <AutoTextarea
-                  value={p.investment_thesis || ''}
-                  onChange={(v) => set('investment_thesis', v || null)}
-                  placeholder="Why is this innovator worth investing in?"
-                  className="text-sm italic leading-relaxed text-stone-800"
-                />
+                <p className="text-sm italic leading-relaxed text-stone-800">{p.investment_thesis}</p>
               </div>
             )}
           </div>
 
           {/* Problem */}
-          <div className="mb-8">
-            <SubLabel>Problem</SubLabel>
-            <FieldWrapper fieldName="problem_statement" confidenceFlags={fl} webAugmentedFields={p.web_augmented_fields}>
-              <AutoTextarea
-                value={p.problem_statement || ''}
-                onChange={(v) => set('problem_statement', v || null)}
-                placeholder="The core problem this innovation addresses"
-                className="text-stone-700 leading-relaxed"
-              />
-            </FieldWrapper>
-          </div>
+          {p.problem_statement && (
+            <div className="mb-8">
+              <SubLabel>Problem</SubLabel>
+              <div className="relative">
+                <p className="text-stone-700 leading-relaxed">{p.problem_statement}</p>
+                {p.web_augmented_fields.includes('problem_statement') && (
+                  <div className="mt-1"><WebAugmentedBadge /></div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Opportunity */}
-          <div className="mb-8">
-            <SubLabel>Opportunity</SubLabel>
-            <FieldWrapper fieldName="opportunity_statement" confidenceFlags={fl} webAugmentedFields={p.web_augmented_fields}>
-              <AutoTextarea
-                value={p.opportunity_statement || ''}
-                onChange={(v) => set('opportunity_statement', v || null)}
-                placeholder="The opportunity or solution approach"
-                className="text-stone-700 leading-relaxed"
-              />
-            </FieldWrapper>
-          </div>
+          {p.opportunity_statement && (
+            <div className="mb-8">
+              <SubLabel>Opportunity</SubLabel>
+              <div className="relative">
+                <p className="text-stone-700 leading-relaxed">{p.opportunity_statement}</p>
+                {p.web_augmented_fields.includes('opportunity_statement') && (
+                  <div className="mt-1"><WebAugmentedBadge /></div>
+                )}
+              </div>
+            </div>
+          )}
 
-          {/* What is novel (model steps — read-only) */}
+          {/* What is novel */}
           <div>
             <SubLabel>What Is Novel</SubLabel>
             {p.model_steps.length > 0 ? (
@@ -288,10 +264,7 @@ const InvestmentProposition = forwardRef<InvestmentPropositionHandle, Props>(fun
                 ))}
               </ul>
             ) : (
-              <div className="relative border-2 border-dashed border-stone-300 rounded-lg p-5 bg-stone-50/50">
-                <div className="absolute -top-2.5 left-3"><NeedsInputBadge /></div>
-                <p className="text-stone-400 italic text-sm mt-2">Human input required</p>
-              </div>
+              <EmptyField />
             )}
           </div>
         </section>
@@ -310,10 +283,7 @@ const InvestmentProposition = forwardRef<InvestmentPropositionHandle, Props>(fun
               ))}
             </ul>
           ) : (
-            <div className="mb-6 relative border-2 border-dashed border-stone-300 rounded-lg p-5 bg-stone-50/50">
-              <div className="absolute -top-2.5 left-3"><NeedsInputBadge /></div>
-              <p className="text-stone-400 italic text-sm mt-2">Human input required</p>
-            </div>
+            <div className="mb-6"><EmptyField /></div>
           )}
 
           <div className="mt-6 p-4 rounded-lg border-l-4" style={{ borderColor: AMBER, backgroundColor: 'rgba(239, 159, 39, 0.08)' }}>
@@ -338,28 +308,17 @@ const InvestmentProposition = forwardRef<InvestmentPropositionHandle, Props>(fun
               ))}
             </div>
           ) : (
-            <div className="mb-8 relative border-2 border-dashed border-stone-300 rounded-lg p-5 bg-stone-50/50">
-              <div className="absolute -top-2.5 left-3"><NeedsInputBadge /></div>
-              <p className="text-stone-400 italic text-sm mt-2">Human input required</p>
-            </div>
+            <div className="mb-8"><EmptyField /></div>
           )}
 
-          {/* Evidence interpretation — editable */}
           <div className="mb-8">
             <SubLabel>What This Signals</SubLabel>
-            <div className={`relative rounded-lg border-2 p-4 ${isHumanEmpty('evidence_interpretation', p.evidence_interpretation) ? 'border-dashed border-stone-300 bg-stone-50/50' : 'border-stone-200 bg-white'}`}>
-              {isHumanEmpty('evidence_interpretation', p.evidence_interpretation) && (
-                <div className="absolute -top-2.5 left-3"><NeedsInputBadge /></div>
-              )}
-              <AutoTextarea
-                value={p.evidence_interpretation || ''}
-                onChange={(v) => set('evidence_interpretation', v || null)}
-                placeholder="Human input required"
-                className={`text-sm leading-relaxed ${isHumanEmpty('evidence_interpretation', p.evidence_interpretation) ? 'mt-2 italic text-stone-400' : 'text-stone-700'}`}
-              />
-            </div>
+            {isHumanEmpty('evidence_interpretation', p.evidence_interpretation) ? (
+              <EmptyField />
+            ) : (
+              <p className="text-stone-700 text-sm leading-relaxed">{p.evidence_interpretation}</p>
+            )}
           </div>
-
         </section>
 
         {/* ── 04 · Economics ───────────────────────────────────────────── */}
@@ -367,37 +326,17 @@ const InvestmentProposition = forwardRef<InvestmentPropositionHandle, Props>(fun
           <ChapterHeading number="04" title="Economics" />
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Cost / Teacher Pilot */}
             <div className="flex flex-col bg-white rounded-lg p-4 border border-stone-200" style={{ borderLeftWidth: '4px', borderLeftColor: AMBER }}>
               <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500 min-h-[2.5rem] leading-tight">Cost / Teacher Pilot</p>
-              <input
-                value={p.cost_per_teacher_now || ''}
-                onChange={(e) => set('cost_per_teacher_now', e.target.value || null)}
-                placeholder="—"
-                autoComplete="off"
-                className="w-full bg-transparent text-xl font-black text-stone-900 placeholder:text-stone-300 focus:outline-none caret-amber-500"
-              />
+              <p className="text-xl font-black text-stone-900">{p.cost_per_teacher_now || '—'}</p>
             </div>
-            {/* Cost / Teacher at Scale Per Year */}
             <div className="flex flex-col bg-white rounded-lg p-4 border border-stone-200" style={{ borderLeftWidth: '4px', borderLeftColor: AMBER }}>
               <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500 min-h-[2.5rem] leading-tight">Cost / Teacher at Scale Per Year</p>
-              <input
-                value={p.cost_per_teacher_scale || ''}
-                onChange={(e) => set('cost_per_teacher_scale', e.target.value || null)}
-                placeholder="—"
-                autoComplete="off"
-                className="w-full bg-transparent text-xl font-black text-stone-900 placeholder:text-stone-300 focus:outline-none caret-amber-500"
-              />
+              <p className="text-xl font-black text-stone-900">{p.cost_per_teacher_scale || '—'}</p>
             </div>
-            {/* Marginal Cost at Scale — AutoTextarea so long values wrap instead of truncating */}
             <div className="flex flex-col bg-white rounded-lg p-4 border border-stone-200" style={{ borderLeftWidth: '4px', borderLeftColor: AMBER }}>
               <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500 min-h-[2.5rem] leading-tight">Marginal Cost at Scale</p>
-              <AutoTextarea
-                value={p.marginal_cost_at_scale || ''}
-                onChange={(v) => set('marginal_cost_at_scale', v || null)}
-                placeholder="—"
-                className="text-xl font-black text-stone-900 leading-snug"
-              />
+              <p className="text-xl font-black text-stone-900 leading-snug">{p.marginal_cost_at_scale || '—'}</p>
             </div>
           </div>
         </section>
@@ -430,36 +369,24 @@ const InvestmentProposition = forwardRef<InvestmentPropositionHandle, Props>(fun
             </div>
           )}
 
-          {/* What the Pilot Will Test — editable */}
+          {/* What the Pilot Will Test */}
           <div className="mb-8">
             <SubLabel>What the Pilot Will Test</SubLabel>
-            <div className={`relative rounded-lg border-2 p-4 ${isHumanEmpty('maturity_to_validate', p.maturity_to_validate) ? 'border-dashed border-stone-300 bg-stone-50/50' : 'border-stone-200 bg-white'}`}>
-              {isHumanEmpty('maturity_to_validate', p.maturity_to_validate) && (
-                <div className="absolute -top-2.5 left-3"><NeedsInputBadge /></div>
-              )}
-              <AutoTextarea
-                value={p.maturity_to_validate || ''}
-                onChange={(v) => set('maturity_to_validate', v || null)}
-                placeholder="Human input required"
-                className={`text-sm leading-relaxed ${isHumanEmpty('maturity_to_validate', p.maturity_to_validate) ? 'mt-2 italic text-stone-400' : 'text-stone-700'}`}
-              />
-            </div>
+            {isHumanEmpty('maturity_to_validate', p.maturity_to_validate) ? (
+              <EmptyField />
+            ) : (
+              <p className="text-stone-700 text-sm leading-relaxed">{p.maturity_to_validate}</p>
+            )}
           </div>
 
-          {/* What we ask from you — editable */}
+          {/* What we ask from you */}
           <div className="mb-8">
             <SubLabel>What We Ask From You</SubLabel>
-            <div className={`relative rounded-lg border-2 p-4 ${isHumanEmpty('ask_funder_outcome', p.ask_funder_outcome) ? 'border-dashed border-stone-300 bg-stone-50/50' : 'border-stone-200 bg-white'}`}>
-              {isHumanEmpty('ask_funder_outcome', p.ask_funder_outcome) && (
-                <div className="absolute -top-2.5 left-3"><NeedsInputBadge /></div>
-              )}
-              <AutoTextarea
-                value={p.ask_funder_outcome || ''}
-                onChange={(v) => set('ask_funder_outcome', v || null)}
-                placeholder="Human input required"
-                className={`text-sm leading-relaxed ${isHumanEmpty('ask_funder_outcome', p.ask_funder_outcome) ? 'mt-2 italic text-stone-400' : 'text-stone-700'}`}
-              />
-            </div>
+            {isHumanEmpty('ask_funder_outcome', p.ask_funder_outcome) ? (
+              <EmptyField />
+            ) : (
+              <p className="text-stone-700 text-sm leading-relaxed">{p.ask_funder_outcome}</p>
+            )}
           </div>
 
           {/* Track record footer */}
